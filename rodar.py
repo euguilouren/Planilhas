@@ -8,14 +8,24 @@ COMO USAR
 5. Copie o conteúdo de briefing.txt e cole no Claude para análise
 """
 
+import logging
+import os
+from datetime import datetime
+
+import pandas as pd
+
 from toolkit_financeiro import (
     Leitor, Auditor, Conciliador, AnalistaFinanceiro,
     AnalistaComercial, MontadorPlanilha, Verificador,
     PipelineFinanceiro, Util, PrestadorContas, Status
 )
-import pandas as pd
-from datetime import datetime
-import os
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%d/%m/%Y %H:%M:%S',
+)
+logger = logging.getLogger(__name__)
 
 # ══════════════════════════════════════════════════════════════════
 # CONFIGURAÇÃO — edite aqui
@@ -39,12 +49,14 @@ COLUNAS_OBRIGATORIAS = [COL_VALOR, COL_DATA, COL_CHAVE]
 # EXECUÇÃO — não precisa editar abaixo
 # ══════════════════════════════════════════════════════════════════
 
-def main():
+def main() -> None:
     print(f"\n{'='*55}")
     print("  TOOLKIT FINANCEIRO — iniciando processamento")
+    print("  Powered by Luan Guilherme Lourenço")
     print(f"{'='*55}")
-    print(f"  Arquivo: {ARQUIVO_ENTRADA}")
-    print(f"  Saída:   {ARQUIVO_SAIDA}\n")
+    logger.info("Arquivo de entrada: %s", ARQUIVO_ENTRADA)
+    logger.info("Arquivo de saída:   %s", ARQUIVO_SAIDA)
+    print()
 
     # ── 1. Verificar se o arquivo existe ────────────────────────
     if not os.path.exists(ARQUIVO_ENTRADA):
@@ -119,8 +131,8 @@ def main():
         try:
             df_aging = AnalistaFinanceiro.calcular_aging(df, COL_DATA, COL_VALOR)
             print("      Aging calculado")
-        except Exception as e:
-            print(f"      Aging ignorado: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning("Aging ignorado: %s", e)
 
     # DRE (se tiver categoria e valor)
     df_dre = None
@@ -128,8 +140,8 @@ def main():
         try:
             df_dre = AnalistaFinanceiro.construir_dre(df, COL_CATEGORIA, COL_VALOR)
             print("      DRE construído")
-        except Exception as e:
-            print(f"      DRE ignorado: {e}")
+        except (KeyError, ValueError, AttributeError) as e:
+            logger.warning("DRE ignorado: %s", e)
 
     # Pareto (se tiver entidade e valor)
     df_pareto = None
@@ -137,8 +149,8 @@ def main():
         try:
             df_pareto = AnalistaComercial.pareto(df, COL_ENTIDADE, COL_VALOR)
             print("      Análise Pareto concluída")
-        except Exception as e:
-            print(f"      Pareto ignorado: {e}")
+        except (KeyError, ValueError, ZeroDivisionError) as e:
+            logger.warning("Pareto ignorado: %s", e)
 
     # Ticket médio
     df_ticket = None
@@ -147,8 +159,8 @@ def main():
             col_grupo = COL_ENTIDADE if COL_ENTIDADE in df.columns else None
             df_ticket = AnalistaComercial.ticket_medio(df, COL_VALOR, col_grupo)
             print("      Ticket médio calculado")
-        except Exception as e:
-            print(f"      Ticket médio ignorado: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning("Ticket médio ignorado: %s", e)
 
     print()
 

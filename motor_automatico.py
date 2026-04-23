@@ -28,7 +28,7 @@ import pandas as pd
 
 from toolkit_financeiro import (
     Leitor, Auditor, AnalistaFinanceiro, AnalistaComercial,
-    MontadorPlanilha, Verificador, Util, Status
+    MontadorPlanilha, Verificador, Util, Status, validar_config
 )
 from relatorio_html import GeradorHTML
 
@@ -51,7 +51,13 @@ def carregar_config(caminho: str = 'config.yaml') -> dict:
         logger.warning("config.yaml não encontrado — usando configuração padrão")
         return {}
     with open(caminho, encoding='utf-8') as f:
-        return yaml.safe_load(f) or {}
+        cfg = yaml.safe_load(f) or {}
+    avisos = validar_config(cfg)
+    for aviso in avisos:
+        logger.warning("config.yaml: %s", aviso)
+    if cfg.get('validacao', {}).get('falhar_em_config_invalida', False) and avisos:
+        raise SystemExit(f"Configuração inválida ({len(avisos)} erros). Corrija config.yaml.")
+    return cfg
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -210,10 +216,26 @@ class ProcessadorArquivo:
             logger.info("CONCLUÍDO — criticos=%d | html=%s",
                         total_criticos, caminho_html.name)
 
+        except (FileNotFoundError, PermissionError) as exc:
+            resultado['status'] = 'ERRO'
+            resultado['erro']   = str(exc)
+            logger.error("Arquivo inacessível %s: %s", caminho_arquivo, exc)
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+            resultado['status'] = 'ERRO'
+            resultado['erro']   = str(exc)
+            logger.error("Dados inválidos em %s: %s", caminho_arquivo, exc)
+        except (ValueError, KeyError) as exc:
+            resultado['status'] = 'ERRO'
+            resultado['erro']   = str(exc)
+            logger.error("Erro de dados em %s: %s", caminho_arquivo, exc)
+        except RuntimeError as exc:
+            resultado['status'] = 'ERRO'
+            resultado['erro']   = str(exc)
+            logger.error("Erro de processamento em %s: %s", caminho_arquivo, exc)
         except Exception as exc:
             resultado['status'] = 'ERRO'
             resultado['erro']   = str(exc)
-            logger.error("ERRO ao processar %s: %s", caminho_arquivo, exc)
+            logger.error("Erro inesperado em %s: %s", caminho_arquivo, exc)
             logger.debug(traceback.format_exc())
 
         return resultado
@@ -265,7 +287,7 @@ class ProcessadorArquivo:
         if col_venc in df.columns and col_val in df.columns:
             try:
                 return AnalistaFinanceiro.calcular_aging(df, col_venc, col_val)
-            except Exception as e:
+            except (KeyError, ValueError, TypeError) as e:
                 logger.debug("Aging ignorado: %s", e)
         return None
 
@@ -273,7 +295,7 @@ class ProcessadorArquivo:
         if col_cat in df.columns and col_val in df.columns:
             try:
                 return AnalistaFinanceiro.construir_dre(df, col_cat, col_val)
-            except Exception as e:
+            except (KeyError, ValueError, AttributeError) as e:
                 logger.debug("DRE ignorado: %s", e)
         return None
 
@@ -281,7 +303,7 @@ class ProcessadorArquivo:
         if col_ent in df.columns and col_val in df.columns:
             try:
                 return AnalistaComercial.pareto(df, col_ent, col_val)
-            except Exception as e:
+            except (KeyError, ValueError, ZeroDivisionError) as e:
                 logger.debug("Pareto ignorado: %s", e)
         return None
 
@@ -290,7 +312,7 @@ class ProcessadorArquivo:
             try:
                 g = col_ent if col_ent in df.columns else None
                 return AnalistaComercial.ticket_medio(df, col_val, g)
-            except Exception as e:
+            except (KeyError, ValueError, TypeError) as e:
                 logger.debug("Ticket ignorado: %s", e)
         return None
 
@@ -352,8 +374,14 @@ class ProcessadorArquivo:
                 server.login(rem, senha)
                 server.sendmail(rem, dests, msg.as_string())
             logger.info("E-mail de alerta enviado para %s", dests)
-        except Exception as e:
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error("Falha de autenticação SMTP: %s", e)
+        except smtplib.SMTPConnectError as e:
+            logger.error("Não foi possível conectar ao servidor SMTP: %s", e)
+        except smtplib.SMTPException as e:
             logger.warning("Falha ao enviar e-mail: %s", e)
+        except (OSError, ConnectionRefusedError) as e:
+            logger.warning("Erro de rede ao enviar e-mail: %s", e)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -403,6 +431,12 @@ def main():
     args = parser.parse_args()
 
     cfg          = carregar_config(args.config)
+
+    logger.info("=" * 55)
+    logger.info("Toolkit Financeiro — Motor Autônomo")
+    logger.info("Powered by Luan Guilherme Lourenço")
+    logger.info("=" * 55)
+
     processador  = ProcessadorArquivo(cfg)
     pasta_entrada = cfg.get('pastas', {}).get('entrada', 'pasta_entrada')
 

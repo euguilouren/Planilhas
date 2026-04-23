@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**", "feature/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Testes (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Rodar testes
+        run: |
+          pytest tests/ -v \
+            --cov=toolkit_financeiro \
+            --cov=relatorio_html \
+            --cov-report=term-missing \
+            --tb=short
+
+  validate-html:
+    name: Validar index.html
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar branding e estrutura HTML
+        run: |
+          python -c "
+          with open('index.html', encoding='utf-8') as f:
+              content = f.read()
+          assert '<!DOCTYPE html>' in content, 'DOCTYPE ausente'
+          assert 'Luan Guilherme' in content, 'Branding ausente no index.html'
+          assert 'Toolkit Financeiro' in content, 'Título ausente'
+          print('index.html: OK')
+          "
+
+  validate-config:
+    name: Validar config.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install PyYAML
+
+      - name: Verificar estrutura do config.yaml
+        run: |
+          python -c "
+          import yaml
+          with open('config.yaml', encoding='utf-8') as f:
+              cfg = yaml.safe_load(f)
+          secoes = ('pastas', 'colunas', 'auditoria', 'indicadores', 'aging', 'email', 'relatorio')
+          for s in secoes:
+              assert s in cfg, f'Seção ausente no config.yaml: {s}'
+          print('config.yaml: OK')
+          "
