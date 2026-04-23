@@ -13,9 +13,10 @@ import json
 import hashlib
 import logging
 import warnings
+import zipfile
 from datetime import datetime, timedelta
 from collections import OrderedDict
-from typing import Union, Optional, List, Dict
+from typing import Union, Optional, List, Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -45,6 +46,53 @@ class Status:
     ALTA = 'ALTA'
     MEDIA = 'MÉDIA'
     BAIXA = 'BAIXA'
+
+
+# ══════════════════════════════════════════════════════════════════
+# VALIDAÇÃO DE CONFIGURAÇÃO
+# ══════════════════════════════════════════════════════════════════
+
+def validar_config(cfg: dict) -> List[str]:
+    """
+    Valida estrutura do config.yaml. Retorna lista de avisos.
+    Não levanta exceção — o chamador decide se é fatal.
+    """
+    avisos: List[str] = []
+
+    for secao in ('pastas', 'colunas', 'colunas_obrigatorias'):
+        if secao not in cfg:
+            avisos.append(f"Seção obrigatória ausente: '{secao}'")
+
+    pastas = cfg.get('pastas', {})
+    for campo in ('entrada', 'saida'):
+        if not pastas.get(campo):
+            avisos.append(f"pastas.{campo} não pode ser vazio")
+
+    audit = cfg.get('auditoria', {})
+    if not isinstance(audit.get('outlier_desvios', 3.0), (int, float)):
+        avisos.append("auditoria.outlier_desvios deve ser numérico")
+    if not isinstance(audit.get('minimo_registros_analise', 5), int):
+        avisos.append("auditoria.minimo_registros_analise deve ser inteiro")
+
+    ind = cfg.get('indicadores', {})
+    for chave in ('liquidez_corrente_min', 'liquidez_seca_min', 'margem_liquida_min',
+                  'endividamento_max', 'roe_min'):
+        val = ind.get(chave)
+        if val is not None and not isinstance(val, (int, float)):
+            avisos.append(f"indicadores.{chave} deve ser numérico, recebeu {type(val).__name__}")
+        elif val is not None and val < 0:
+            avisos.append(f"indicadores.{chave} deve ser >= 0, recebeu {val}")
+
+    email = cfg.get('email', {})
+    if email.get('ativo', False):
+        for campo in ('smtp_servidor', 'remetente', 'destinatarios'):
+            if not email.get(campo):
+                avisos.append(f"email.{campo} é obrigatório quando email.ativo=true")
+        porta = email.get('smtp_porta', 587)
+        if not isinstance(porta, int) or not (1 <= porta <= 65535):
+            avisos.append(f"email.smtp_porta deve ser inteiro 1-65535, recebeu {porta}")
+
+    return avisos
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -97,8 +145,14 @@ class Leitor:
 
         except (FileNotFoundError, ValueError):
             raise
-        except Exception as exc:
-            raise RuntimeError(f"Erro ao ler '{caminho}': {exc}") from exc
+        except zipfile.BadZipFile as exc:
+            raise RuntimeError(f"Arquivo Excel corrompido '{caminho}': {exc}") from exc
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+            raise RuntimeError(f"Arquivo corrompido ou vazio '{caminho}': {exc}") from exc
+        except PermissionError as exc:
+            raise RuntimeError(f"Sem permissão para ler '{caminho}': {exc}") from exc
+        except OSError as exc:
+            raise RuntimeError(f"Erro de I/O ao ler '{caminho}': {exc}") from exc
 
         for aba_info in diagnostico['abas']:
             df = dados[aba_info['nome']]
@@ -588,19 +642,27 @@ class AnalistaFinanceiro:
     """Análises de DRE, fluxo de caixa, aging e indicadores."""
 
     @staticmethod
-    def calcular_aging(df: pd.DataFrame, col_vencimento: str, col_valor: str, data_ref: datetime = None) -> pd.DataFrame:
+    def calcular_aging(
+        df: pd.DataFrame,
+        col_vencimento: str,
+        col_valor: str,
+        data_ref: datetime = None,
+        faixa_atencao: int = 30,
+        faixa_critica: int = 90,
+    ) -> pd.DataFrame:
         if data_ref is None:
             data_ref = datetime.now()
         df = df.copy()
         venc = pd.to_datetime(df[col_vencimento], errors='coerce', dayfirst=True)
         dias = (data_ref - venc).dt.days
+        faixa_media = (faixa_atencao + faixa_critica) // 2
 
         def _faixa(d):
             if pd.isna(d): return 'Sem data'
             if d < 0:       return 'A vencer'
-            if d <= 30:     return 'Vencido 1-30 dias'
-            if d <= 60:     return 'Vencido 31-60 dias'
-            if d <= 90:     return 'Vencido 61-90 dias'
+            if d <= faixa_atencao: return 'Vencido 1-30 dias'
+            if d <= faixa_media:   return 'Vencido 31-60 dias'
+            if d <= faixa_critica: return 'Vencido 61-90 dias'
             return 'Vencido +90 dias'
 
         df['Faixa_Aging'] = dias.apply(_faixa)
@@ -824,6 +886,7 @@ class AnalistaComercial:
     def realizado_vs_meta(
         df_realizado: pd.DataFrame, df_meta: pd.DataFrame,
         col_chave: str, col_valor_real: str, col_valor_meta: str,
+        atingimento_parcial_min: float = 80.0,
     ) -> pd.DataFrame:
         merged = pd.merge(
             df_realizado.groupby(col_chave).agg(
@@ -842,7 +905,7 @@ class AnalistaComercial:
         )
         merged['Status'] = np.where(
             merged['Atingimento_%'] >= 100, 'META ATINGIDA',
-            np.where(merged['Atingimento_%'] >= 80, 'PARCIAL', 'ABAIXO'),
+            np.where(merged['Atingimento_%'] >= atingimento_parcial_min, 'PARCIAL', 'ABAIXO'),
         )
         return merged.sort_values('Desvio_RS').reset_index(drop=True)
 
@@ -1061,7 +1124,7 @@ class MontadorPlanilha:
         self._aba_meta: Dict[str, dict] = {}
 
     @staticmethod
-    def _safe_value(valor):
+    def _safe_value(valor) -> Union[str, float, int, None]:
         if isinstance(valor, (list, dict, set, tuple)):
             return str(valor)[:MontadorPlanilha.MAX_CELL_TEXT]
         if isinstance(valor, np.integer):
@@ -1087,7 +1150,7 @@ class MontadorPlanilha:
                 num = pd.to_numeric(series, errors='coerce')
                 max_abs = max(abs(num.max()), abs(num.min())) if num.notna().any() else 0
                 content_len = len(f'{max_abs:,.2f}') + 4
-            except Exception:
+            except (TypeError, ValueError):
                 content_len = 15
         else:
             str_lens = series.astype(str).str.len()

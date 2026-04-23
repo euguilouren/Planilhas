@@ -3,9 +3,13 @@ Gerador de relatório HTML autônomo — sem dependências externas.
 Produz um arquivo .html autocontido que abre em qualquer navegador.
 """
 
+import logging
 from datetime import datetime
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 class GeradorHTML:
@@ -32,6 +36,7 @@ class GeradorHTML:
         diagnostico:     dict          = None,
     ) -> str:
         """Retorna string HTML completa do relatório."""
+        logger.info("Gerando relatório HTML para: %s", arquivo_origem)
         empresa = self.cfg.get('relatorio', {}).get('empresa', 'Empresa')
         titulo  = self.cfg.get('relatorio', {}).get('titulo',  'Relatório Financeiro')
         agora   = datetime.now().strftime('%d/%m/%Y %H:%M')
@@ -161,8 +166,11 @@ class GeradorHTML:
 </div>
 <div class="footer">
   Relatório gerado automaticamente pelo Toolkit Financeiro &bull; {agora}
+  <br>
+  <span style="font-size:10px;opacity:0.7;">Powered by <strong>Luan Guilherme Lourenço</strong></span>
 </div>
 </body></html>"""
+        logger.info("Relatório HTML gerado (%d bytes)", len(html))
         return html
 
     # ── Seções privadas ───────────────────────────────────────────

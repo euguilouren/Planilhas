@@ -45,9 +45,24 @@ aging:
 indicadores:
   liquidez_corrente_min:  1.0
   liquidez_seca_min:      0.8
+  liquidez_imediata_min:  0.3
   margem_liquida_min:     5.0   # %
   endividamento_max:      100.0 # %
   roe_min:                15.0  # %
+
+# Thresholds de análise comercial
+analise_comercial:
+  pareto_corte:             0.80  # curva ABC — limite classe A (80%)
+  similaridade_entidades:   0.80  # threshold fuzzy matching (0.0–1.0)
+
+# Metas e atingimento
+metas:
+  atingimento_parcial_min: 80    # % mínimo para status PARCIAL
+
+# Validação de configuração
+validacao:
+  obrigatoria: true
+  falhar_em_config_invalida: false  # true = encerra em config inválida
 
 # Alertas por e-mail (deixe vazio para desativar)
 email:
