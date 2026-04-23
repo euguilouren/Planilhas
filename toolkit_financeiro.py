@@ -16,7 +16,7 @@ import warnings
 import zipfile
 from datetime import datetime, timedelta
 from collections import OrderedDict
-from typing import Union, Optional, List, Dict, Tuple
+from typing import Union, Optional, List, Dict
 
 import numpy as np
 import pandas as pd
