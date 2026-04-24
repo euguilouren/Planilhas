@@ -1686,3 +1686,390 @@ class PipelineFinanceiro:
         path = self.montador.salvar(caminho_saida)
         logger.info("Pipeline concluído → %s", path)
         return path
+
+
+# ══════════════════════════════════════════════════════════════════
+# NORMALIZADOR — PLANILHA PADRÃO DO SISTEMA
+# ══════════════════════════════════════════════════════════════════
+
+class Normalizador:
+    """Converte qualquer planilha avulsa para o formato padrão do sistema
+    e valida a integridade dos dados antes do processamento.
+    """
+
+    # Definição canônica das colunas do sistema
+    COLUNAS_PADRAO: List[Dict] = [
+        {'nome': 'NF',         'tipo': 'texto',  'obrigatorio': True,
+         'descricao': 'Número da Nota Fiscal ou ID único do lançamento'},
+        {'nome': 'Data',       'tipo': 'data',   'obrigatorio': True,
+         'descricao': 'Data de emissão (DD/MM/AAAA)'},
+        {'nome': 'Vencimento', 'tipo': 'data',   'obrigatorio': True,
+         'descricao': 'Data de vencimento (DD/MM/AAAA)'},
+        {'nome': 'Valor',      'tipo': 'moeda',  'obrigatorio': True,
+         'descricao': 'Valor em R$ (número, ponto como decimal)'},
+        {'nome': 'Categoria',  'tipo': 'lista',  'obrigatorio': True,
+         'opcoes': ['RECEITA', 'CMV', 'DESPESA OPERACIONAL',
+                    'DESPESA FINANCEIRA', 'IMPOSTO', 'OUTRO'],
+         'descricao': 'Categoria do lançamento'},
+        {'nome': 'Cliente',    'tipo': 'texto',  'obrigatorio': True,
+         'descricao': 'Nome do cliente ou fornecedor'},
+        {'nome': 'Status',     'tipo': 'lista',  'obrigatorio': False,
+         'opcoes': ['PAGO', 'PENDENTE', 'ATRASADO', 'CANCELADO'],
+         'descricao': 'Status do título (deixe vazio se não aplicável)'},
+        {'nome': 'Observacao', 'tipo': 'texto',  'obrigatorio': False,
+         'descricao': 'Observação livre (opcional)'},
+    ]
+
+    NOMES_COLUNAS = [c['nome'] for c in COLUNAS_PADRAO]
+    COLUNAS_OBRIGATORIAS = [c['nome'] for c in COLUNAS_PADRAO if c['obrigatorio']]
+
+    # ── Conversão ──────────────────────────────────────────────────
+
+    @staticmethod
+    def para_padrao(
+        df: pd.DataFrame,
+        mapeamento: Dict[str, str],
+        preencher_status: bool = True,
+    ) -> pd.DataFrame:
+        """Converte um DataFrame avulso para o formato padrão do sistema.
+
+        Args:
+            df: DataFrame de entrada (qualquer formato).
+            mapeamento: Dict mapeando nome_padrao → nome_coluna_original.
+                Ex.: {'NF': 'Num_Doc', 'Valor': 'Vl_Total', ...}
+            preencher_status: Se True, preenche Status vazio com 'PENDENTE'.
+
+        Returns:
+            DataFrame normalizado com exatamente as colunas do padrão,
+            na ordem definida, com tipos coerced.
+        """
+        df_norm = pd.DataFrame()
+
+        for col_def in Normalizador.COLUNAS_PADRAO:
+            nome  = col_def['nome']
+            tipo  = col_def['tipo']
+            orig  = mapeamento.get(nome)
+
+            if orig and orig in df.columns:
+                serie = df[orig].copy()
+            else:
+                serie = pd.Series([''] * len(df), dtype=object)
+
+            # Coerce de tipo
+            if tipo == 'moeda':
+                serie = pd.to_numeric(
+                    serie.astype(str)
+                         .str.replace(r'[R$\s]', '', regex=True)
+                         .str.replace('.', '', regex=False)
+                         .str.replace(',', '.', regex=False),
+                    errors='coerce'
+                ).fillna(0.0)
+
+            elif tipo == 'data':
+                serie = pd.to_datetime(serie, errors='coerce', dayfirst=True)
+                serie = serie.dt.strftime('%d/%m/%Y').fillna('')
+
+            elif tipo == 'lista':
+                opcoes = col_def.get('opcoes', [])
+                # Normaliza para uppercase e verifica se está nas opções válidas
+                serie = serie.astype(str).str.strip().str.upper()
+                # Mantém valor se for opção válida, senão deixa vazio
+                serie = serie.where(serie.isin(opcoes + ['']), other='')
+
+            else:  # texto
+                serie = serie.astype(str).str.strip()
+                serie = serie.replace({'nan': '', 'None': '', 'NaT': ''})
+
+            df_norm[nome] = serie.values
+
+        # Preenche Status em branco com PENDENTE
+        if preencher_status and 'Status' in df_norm.columns:
+            df_norm['Status'] = df_norm['Status'].replace('', 'PENDENTE')
+
+        logger.info("Normalização: %d registros → formato padrão", len(df_norm))
+        return df_norm
+
+    # ── Validação ──────────────────────────────────────────────────
+
+    @staticmethod
+    def validar(df: pd.DataFrame) -> List[Dict]:
+        """Valida um DataFrame já no formato padrão.
+
+        Args:
+            df: DataFrame normalizado.
+
+        Returns:
+            Lista de dicts com problemas encontrados.
+            Lista vazia significa dados válidos.
+        """
+        problemas = []
+
+        # Verifica colunas obrigatórias presentes
+        for col in Normalizador.COLUNAS_OBRIGATORIAS:
+            if col not in df.columns:
+                problemas.append({
+                    'coluna': col, 'linha': None,
+                    'tipo': 'COLUNA_AUSENTE',
+                    'severidade': Status.CRITICA,
+                    'descricao': f"Coluna obrigatória '{col}' não encontrada após normalização.",
+                })
+
+        if not len(df):
+            problemas.append({
+                'coluna': None, 'linha': None,
+                'tipo': 'DADOS_VAZIOS',
+                'severidade': Status.CRITICA,
+                'descricao': "Nenhum registro encontrado após normalização.",
+            })
+            return problemas
+
+        # Valida cada coluna
+        for col_def in Normalizador.COLUNAS_PADRAO:
+            nome = col_def['nome']
+            if nome not in df.columns:
+                continue
+
+            serie = df[nome]
+
+            # Campos obrigatórios vazios
+            if col_def['obrigatorio']:
+                if col_def['tipo'] == 'moeda':
+                    vazios = (pd.to_numeric(serie, errors='coerce').isna() |
+                              (pd.to_numeric(serie, errors='coerce') == 0))
+                else:
+                    vazios = serie.astype(str).str.strip().isin(['', 'nan', 'None'])
+
+                linhas_vazias = list(df.index[vazios] + 2)
+                if linhas_vazias:
+                    problemas.append({
+                        'coluna': nome,
+                        'linha': linhas_vazias[:10],
+                        'tipo': 'CAMPO_OBRIGATORIO_VAZIO',
+                        'severidade': Status.CRITICA,
+                        'descricao': (
+                            f"'{nome}' vazio em {len(linhas_vazias)} registro(s). "
+                            f"Linhas: {', '.join(map(str, linhas_vazias[:5]))}"
+                            + (' ...' if len(linhas_vazias) > 5 else '')
+                        ),
+                    })
+
+            # Valores fora das opções de lista
+            if col_def['tipo'] == 'lista' and col_def.get('opcoes'):
+                opcoes = col_def['opcoes']
+                invalidos_mask = (
+                    ~serie.astype(str).str.upper().isin(opcoes + ['', 'PENDENTE'])
+                )
+                linhas_inv = list(df.index[invalidos_mask] + 2)
+                if linhas_inv:
+                    problemas.append({
+                        'coluna': nome,
+                        'linha': linhas_inv[:10],
+                        'tipo': 'VALOR_INVALIDO',
+                        'severidade': Status.ALTA,
+                        'descricao': (
+                            f"'{nome}' contém valores não reconhecidos em "
+                            f"{len(linhas_inv)} linha(s). Valores aceitos: "
+                            f"{', '.join(opcoes)}."
+                        ),
+                    })
+
+            # Datas inválidas (após coerce ficam vazias)
+            if col_def['tipo'] == 'data':
+                re_data = re.compile(r'^\d{2}/\d{2}/\d{4}$')
+                invalidas = serie.astype(str).apply(
+                    lambda x: bool(x) and x not in ('', 'nan') and not re_data.match(x)
+                )
+                linhas_data = list(df.index[invalidas] + 2)
+                if linhas_data:
+                    problemas.append({
+                        'coluna': nome,
+                        'linha': linhas_data[:10],
+                        'tipo': 'DATA_INVALIDA',
+                        'severidade': Status.ALTA,
+                        'descricao': (
+                            f"'{nome}' com formato inválido em {len(linhas_data)} linha(s). "
+                            "Use DD/MM/AAAA."
+                        ),
+                    })
+
+        # NF duplicada
+        if 'NF' in df.columns:
+            dup_mask = df['NF'].astype(str).str.strip().duplicated(keep=False)
+            dup_nfs  = df.loc[dup_mask & (df['NF'].astype(str).str.strip() != ''), 'NF'].unique()
+            if len(dup_nfs):
+                problemas.append({
+                    'coluna': 'NF',
+                    'linha': None,
+                    'tipo': 'NF_DUPLICADA',
+                    'severidade': Status.CRITICA,
+                    'descricao': (
+                        f"{len(dup_nfs)} NF(s) duplicada(s): "
+                        f"{', '.join(str(n) for n in dup_nfs[:5])}"
+                        + (' ...' if len(dup_nfs) > 5 else '')
+                    ),
+                })
+
+        # Valores negativos em Valor
+        if 'Valor' in df.columns:
+            negativos = pd.to_numeric(df['Valor'], errors='coerce') < 0
+            linhas_neg = list(df.index[negativos] + 2)
+            if linhas_neg:
+                problemas.append({
+                    'coluna': 'Valor',
+                    'linha': linhas_neg,
+                    'tipo': 'VALOR_NEGATIVO',
+                    'severidade': Status.MEDIA,
+                    'descricao': (
+                        f"Valor negativo em {len(linhas_neg)} linha(s): "
+                        f"{', '.join(map(str, linhas_neg[:5]))}. "
+                        "Verifique se são devoluções ou lançamentos de despesa."
+                    ),
+                })
+
+        n_ok = len(df) - sum(
+            len(p['linha']) if isinstance(p['linha'], list) else (1 if p['linha'] else 0)
+            for p in problemas
+        )
+        logger.info("Validação padrão: %d problema(s) | ~%d registro(s) OK", len(problemas), max(n_ok, 0))
+        return problemas
+
+    # ── Gerador de template ────────────────────────────────────────
+
+    @staticmethod
+    def gerar_template(caminho: str = 'template_padrao.xlsx') -> str:
+        """Gera o arquivo Excel template do sistema com formatação completa.
+
+        Args:
+            caminho: Caminho de destino do arquivo .xlsx.
+
+        Returns:
+            Caminho do arquivo gerado.
+        """
+        wb = Workbook()
+        ws_dados  = wb.active
+        ws_dados.title = 'DADOS'
+        ws_info   = wb.create_sheet('INSTRUÇÕES')
+
+        # ── Aba INSTRUÇÕES ────────────────────────────────────────
+        ws_info.column_dimensions['A'].width = 20
+        ws_info.column_dimensions['B'].width = 55
+        ws_info.column_dimensions['C'].width = 20
+
+        hdr_font  = Font(name='Arial', bold=True, size=12, color='FFFFFF')
+        hdr_fill  = PatternFill('solid', fgColor='1A3556')
+        sub_font  = Font(name='Arial', bold=True, size=10, color='1A3556')
+        ok_fill   = PatternFill('solid', fgColor='D1FAE5')
+        opt_fill  = PatternFill('solid', fgColor='FEF3C7')
+        thin_brd  = Border(
+            left=Side(style='thin', color='B0B0B0'),
+            right=Side(style='thin', color='B0B0B0'),
+            top=Side(style='thin', color='B0B0B0'),
+            bottom=Side(style='thin', color='B0B0B0'),
+        )
+
+        ws_info['A1'] = 'Toolkit Financeiro — Planilha Padrão do Sistema'
+        ws_info['A1'].font = Font(name='Arial', bold=True, size=14, color='1A3556')
+        ws_info.merge_cells('A1:C1')
+        ws_info.row_dimensions[1].height = 28
+
+        ws_info['A3'] = 'Coluna'
+        ws_info['B3'] = 'Descrição'
+        ws_info['C3'] = 'Obrigatório'
+        for cel in [ws_info['A3'], ws_info['B3'], ws_info['C3']]:
+            cel.font = hdr_font
+            cel.fill = hdr_fill
+            cel.alignment = Alignment(horizontal='center', vertical='center')
+
+        for i, col_def in enumerate(Normalizador.COLUNAS_PADRAO, start=4):
+            ws_info.cell(i, 1, col_def['nome']).font = sub_font
+            ws_info.cell(i, 2, col_def['descricao'])
+            obrig = '✅ Sim' if col_def['obrigatorio'] else '— Não'
+            cel_o = ws_info.cell(i, 3, obrig)
+            if col_def['obrigatorio']:
+                cel_o.fill = ok_fill
+            cel_o.alignment = Alignment(horizontal='center')
+            if col_def.get('opcoes'):
+                opc_row = i + len(Normalizador.COLUNAS_PADRAO) + 3
+                ws_info.cell(i, 2).value += f"  |  Opções: {', '.join(col_def['opcoes'])}"
+            for col_idx in range(1, 4):
+                ws_info.cell(i, col_idx).border = thin_brd
+
+        ws_info.row_dimensions[3].height = 20
+
+        # ── Aba DADOS ─────────────────────────────────────────────
+        headers = Normalizador.NOMES_COLUNAS
+        col_widths = [15, 16, 16, 16, 26, 30, 14, 35]
+
+        for i, (h, w) in enumerate(zip(headers, col_widths), start=1):
+            cel = ws_dados.cell(1, i, h)
+            cel.font  = Font(name='Arial', bold=True, size=11, color='FFFFFF')
+            cel.fill  = PatternFill('solid', fgColor='1A3556')
+            cel.alignment = Alignment(horizontal='center', vertical='center')
+            cel.border = Border(
+                left=Side(style='medium', color='C9A227'),
+                right=Side(style='medium', color='C9A227'),
+                top=Side(style='medium', color='C9A227'),
+                bottom=Side(style='medium', color='C9A227'),
+            )
+            ws_dados.column_dimensions[get_column_letter(i)].width = w
+
+        ws_dados.row_dimensions[1].height = 24
+
+        # Dados de exemplo (3 linhas)
+        exemplos = [
+            ['NF-2024-001', '01/01/2024', '31/01/2024', 5000.00,
+             'RECEITA', 'Empresa Alpha Ltda', 'PAGO', 'Contrato mensal'],
+            ['NF-2024-002', '05/01/2024', '05/02/2024', 1200.50,
+             'DESPESA OPERACIONAL', 'Fornecedor Beta S/A', 'PENDENTE', ''],
+            ['NF-2024-003', '10/01/2024', '10/01/2024', 3750.00,
+             'CMV', 'Distribuidora Gamma', 'PAGO', 'Compra de mercadoria'],
+        ]
+        ex_fill  = PatternFill('solid', fgColor='F0F4F8')
+        ex_fill2 = PatternFill('solid', fgColor='FFFFFF')
+        for row_i, ex in enumerate(exemplos, start=2):
+            fill = ex_fill if row_i % 2 == 0 else ex_fill2
+            for col_i, val in enumerate(ex, start=1):
+                cel = ws_dados.cell(row_i, col_i, val)
+                cel.fill   = fill
+                cel.border = thin_brd
+                cel.font   = Font(name='Arial', size=10)
+                if col_i == 4:  # Valor
+                    cel.number_format = 'R$ #,##0.00'
+                    cel.alignment = Alignment(horizontal='right')
+                elif col_i in (2, 3):  # Datas
+                    cel.alignment = Alignment(horizontal='center')
+
+        # Linha de dica abaixo dos exemplos
+        dica_row = len(exemplos) + 2
+        ws_dados.cell(dica_row, 1,
+            '⬆ Apague as linhas de exemplo acima e insira seus dados a partir da linha 2.'
+        ).font = Font(name='Arial', italic=True, size=9, color='9BA8B5')
+        ws_dados.merge_cells(
+            start_row=dica_row, start_column=1,
+            end_row=dica_row, end_column=len(headers)
+        )
+
+        # Freeze header
+        ws_dados.freeze_panes = 'A2'
+
+        # Validação de dados nas colunas de lista (Excel nativo)
+        from openpyxl.worksheet.datavalidation import DataValidation
+        for col_def in Normalizador.COLUNAS_PADRAO:
+            if col_def.get('opcoes'):
+                idx = Normalizador.NOMES_COLUNAS.index(col_def['nome']) + 1
+                col_letra = get_column_letter(idx)
+                dv = DataValidation(
+                    type='list',
+                    formula1=f'"{",".join(col_def["opcoes"])}"',
+                    allow_blank=not col_def['obrigatorio'],
+                    showErrorMessage=True,
+                    errorTitle='Valor inválido',
+                    error=f'Use uma das opções: {", ".join(col_def["opcoes"])}',
+                )
+                ws_dados.add_data_validation(dv)
+                dv.add(f'{col_letra}2:{col_letra}10000')
+
+        wb.active = ws_dados
+        wb.save(caminho)
+        logger.info("Template padrão gerado: %s", caminho)
+        return caminho

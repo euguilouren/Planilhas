@@ -406,6 +406,11 @@ body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:var(--bg);
   font-weight:700;cursor:pointer;margin-top:18px;letter-spacing:.1px;font-family:inherit;
   box-shadow:0 4px 14px rgba(184,150,12,.4);transition:all .2s}
 .btn-analisar:hover{box-shadow:0 6px 20px rgba(184,150,12,.55);transform:translateY(-1px)}
+/* Alertas de validação */
+.alerta-critico{background:#FEE2E2;border-left:4px solid #991B1B;color:#991B1B;padding:10px 14px;border-radius:6px;font-size:12.5px;margin-bottom:8px;font-weight:600}
+.alerta-alto{background:#FFF0E6;border-left:4px solid #7C2D12;color:#7C2D12;padding:10px 14px;border-radius:6px;font-size:12.5px;margin-bottom:8px;font-weight:600}
+.alerta-medio{background:#FEF3C7;border-left:4px solid #92400E;color:#92400E;padding:10px 14px;border-radius:6px;font-size:12.5px;margin-bottom:8px}
+.alerta-ok{background:#D1FAE5;border-left:4px solid #065F46;color:#065F46;padding:10px 14px;border-radius:6px;font-size:12.5px;font-weight:600}
 /* Dashboard */
 #dashboard{display:none;max-width:1240px;margin:0 auto;padding:20px}
 /* KPIs */
@@ -549,14 +554,35 @@ tr:hover td{background:#F7FAFD}
     <button class="btn-upload" onclick="document.getElementById('file-input').click()">
       Selecionar arquivo
     </button>
+    <button class="btn-upload" style="background:linear-gradient(135deg,#8B6914,#C9A227);margin-left:10px" onclick="baixarTemplate()">
+      ↓ Baixar Template Padrão
+    </button>
     <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.xlsm">
   </div>
 
   <div class="col-config" id="col-config" style="display:none">
-    <h3>Configuração de Colunas</h3>
-    <p class="col-hint">Detectamos automaticamente as colunas abaixo. Ajuste se necessário antes de analisar.</p>
+    <h3>Mapeamento de Colunas → Formato Padrão</h3>
+    <p class="col-hint">Indique qual coluna do seu arquivo corresponde a cada campo do sistema. O sistema converterá automaticamente para o formato padrão antes de analisar.</p>
     <div class="col-grid" id="col-selects"></div>
-    <button class="btn-analisar" onclick="executarAnalise()">Analisar planilha →</button>
+
+    <!-- Preview da normalização -->
+    <div id="preview-padrao" style="display:none;margin-top:20px">
+      <div style="background:#0D1B2A;color:#C9A227;padding:10px 16px;border-radius:8px 8px 0 0;font-size:12px;font-weight:700;letter-spacing:.5px;text-transform:uppercase">
+        ✅ Pré-visualização — Planilha Padrão do Sistema (primeiras 5 linhas)
+      </div>
+      <div style="overflow-x:auto;border:1px solid #DDE6F0;border-top:none;border-radius:0 0 8px 8px">
+        <table id="tabela-preview" style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead id="thead-preview" style="background:#1A3556;color:white"></thead>
+          <tbody id="tbody-preview"></tbody>
+        </table>
+      </div>
+      <div id="alertas-validacao" style="margin-top:12px"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn-analisar" style="flex:1" onclick="previewNormalizacao()">Pré-visualizar conversão →</button>
+      <button class="btn-analisar" id="btn-analisar" style="flex:1;display:none;background:linear-gradient(135deg,#1A6B3A,#27AE60)" onclick="executarAnalise()">Analisar planilha →</button>
+    </div>
   </div>
 </div>
 
@@ -610,12 +636,189 @@ tr:hover td{background:#F7FAFD}
 // ══════════════════════════════════════════════════════
 // ESTADO GLOBAL
 // ══════════════════════════════════════════════════════
-let _dadosOriginais = [];
-let _dadosFiltrados = [];
-let _headers        = [];
-let _cols           = {};
-let _nomeArquivo    = '';
-let _chartAging     = null;
+let _dadosOriginais   = [];
+let _dadosFiltrados   = [];
+let _dadosNormalizados = null;
+let _headers          = [];
+let _cols             = {};
+let _nomeArquivo      = '';
+let _chartAging       = null;
+
+// ══════════════════════════════════════════════════════
+// DEFINIÇÃO DO FORMATO PADRÃO DO SISTEMA
+// ══════════════════════════════════════════════════════
+const COLUNAS_PADRAO = [
+  { nome:'NF',         tipo:'texto', obrigatorio:true  },
+  { nome:'Data',       tipo:'data',  obrigatorio:true  },
+  { nome:'Vencimento', tipo:'data',  obrigatorio:true  },
+  { nome:'Valor',      tipo:'moeda', obrigatorio:true  },
+  { nome:'Categoria',  tipo:'lista', obrigatorio:true,
+    opcoes:['RECEITA','CMV','DESPESA OPERACIONAL','DESPESA FINANCEIRA','IMPOSTO','OUTRO'] },
+  { nome:'Cliente',    tipo:'texto', obrigatorio:true  },
+  { nome:'Status',     tipo:'lista', obrigatorio:false,
+    opcoes:['PAGO','PENDENTE','ATRASADO','CANCELADO'] },
+  { nome:'Observacao', tipo:'texto', obrigatorio:false },
+];
+
+// ── Normaliza um array de objetos para o formato padrão ─
+function normalizarParaPadrao(dados, mapeamento) {
+  return dados.map(row => {
+    const out = {};
+    COLUNAS_PADRAO.forEach(col => {
+      const origKey = mapeamento[col.nome];
+      let val = origKey ? (row[origKey] ?? '') : '';
+
+      if (col.tipo === 'moeda') {
+        const num = parseFloat(
+          String(val).replace(/[R$\s]/g,'').replace(/\./g,'').replace(',','.')
+        );
+        val = isNaN(num) ? 0 : num;
+
+      } else if (col.tipo === 'data') {
+        // Tenta formatar como DD/MM/AAAA
+        if (val instanceof Date) {
+          const d = val;
+          val = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+        } else {
+          const s = String(val).trim();
+          // Já está no formato certo
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) val = s;
+          // ISO: YYYY-MM-DD
+          else if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+            const [y,m,d] = s.split('-');
+            val = `${d.substring(0,2)}/${m}/${y}`;
+          } else val = '';
+        }
+
+      } else if (col.tipo === 'lista') {
+        const u = String(val).trim().toUpperCase();
+        val = col.opcoes.includes(u) ? u : '';
+
+      } else {
+        val = String(val).trim().replace(/^(nan|None|NaT)$/i,'');
+      }
+
+      // Status vazio → PENDENTE
+      if (col.nome === 'Status' && val === '') val = 'PENDENTE';
+      out[col.nome] = val;
+    });
+    return out;
+  });
+}
+
+// ── Valida o DataFrame padrão, retorna lista de alertas ─
+function validarPadrao(dados) {
+  const alertas = [];
+  if (!dados.length) {
+    alertas.push({ sev:'CRÍTICA', tipo:'DADOS_VAZIOS', msg:'Nenhum registro encontrado após conversão.' });
+    return alertas;
+  }
+  COLUNAS_PADRAO.forEach(col => {
+    if (!col.obrigatorio) return;
+    const vazios = dados.reduce((acc,row,i) => {
+      const v = row[col.nome];
+      const vazio = (col.tipo==='moeda') ? (v===0||v===''||v==null) : (!v||String(v).trim()==='');
+      if (vazio) acc.push(i+2);
+      return acc;
+    }, []);
+    if (vazios.length) alertas.push({
+      sev:'CRÍTICA', tipo:'CAMPO_OBRIGATORIO_VAZIO',
+      msg:`'${col.nome}' vazio em ${vazios.length} registro(s). Linhas: ${vazios.slice(0,5).join(', ')}${vazios.length>5?' ...':''}`
+    });
+  });
+  // NF duplicada
+  const nfs = dados.map(r=>String(r.NF||'').trim()).filter(Boolean);
+  const dups = nfs.filter((n,i)=>nfs.indexOf(n)!==i);
+  if (dups.length) alertas.push({
+    sev:'CRÍTICA', tipo:'NF_DUPLICADA',
+    msg:`${[...new Set(dups)].length} NF(s) duplicada(s): ${[...new Set(dups)].slice(0,5).join(', ')}`
+  });
+  // Valores negativos
+  const negs = dados.reduce((a,r,i)=>{ if((+r.Valor||0)<0) a.push(i+2); return a; },[]);
+  if (negs.length) alertas.push({
+    sev:'MÉDIA', tipo:'VALOR_NEGATIVO',
+    msg:`Valor negativo em ${negs.length} linha(s): ${negs.slice(0,5).join(', ')}`
+  });
+  return alertas;
+}
+
+// ── Pré-visualização antes de analisar ──────────────────
+function previewNormalizacao() {
+  const mapeamento = {};
+  COLUNAS_PADRAO.forEach(col => {
+    const sel = document.getElementById(`sel-${col.nome.toLowerCase()}`);
+    if (sel) mapeamento[col.nome] = sel.value || null;
+  });
+
+  const dadosPadrao = normalizarParaPadrao(_dadosOriginais, mapeamento);
+  _dadosNormalizados = dadosPadrao;
+
+  // Renderiza tabela preview (5 linhas)
+  const thead = document.getElementById('thead-preview');
+  const tbody = document.getElementById('tbody-preview');
+  const colunas = COLUNAS_PADRAO.map(c=>c.nome);
+
+  thead.innerHTML = `<tr>${colunas.map(c=>`<th style="padding:8px 12px;font-size:11px;font-weight:600;text-align:left;white-space:nowrap">${c}</th>`).join('')}</tr>`;
+  tbody.innerHTML = dadosPadrao.slice(0,5).map((row,i) => {
+    const bg = i%2===0?'#F7FAFD':'white';
+    return `<tr style="background:${bg}">${colunas.map(c=>{
+      const v = row[c];
+      const disp = (c==='Valor') ? (typeof v==='number' ? 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2}) : v) : v;
+      return `<td style="padding:7px 12px;border-bottom:1px solid #EEF2F7;white-space:nowrap;font-size:12px">${disp??''}</td>`;
+    }).join('')}</tr>`;
+  }).join('');
+
+  // Alertas de validação
+  const alertas = validarPadrao(dadosPadrao);
+  const divAlertas = document.getElementById('alertas-validacao');
+  if (!alertas.length) {
+    divAlertas.innerHTML = `<div class="alerta-ok">✅ Dados validados com sucesso — ${dadosPadrao.length.toLocaleString('pt-BR')} registros prontos para análise.</div>`;
+  } else {
+    const criticos = alertas.filter(a=>a.sev==='CRÍTICA').length;
+    divAlertas.innerHTML = alertas.map(a => {
+      const cls = {'CRÍTICA':'alerta-critico','ALTA':'alerta-alto','MÉDIA':'alerta-medio'}[a.sev]||'alerta-medio';
+      return `<div class="${cls}">⚠ [${a.sev}] ${a.tipo}: ${a.msg}</div>`;
+    }).join('') + (criticos===0 ? `<div class="alerta-ok">✅ Sem problemas críticos — ${dadosPadrao.length.toLocaleString('pt-BR')} registros prontos para análise.</div>` : '');
+  }
+
+  document.getElementById('preview-padrao').style.display = 'block';
+  document.getElementById('btn-analisar').style.display = 'block';
+}
+
+// ── Download do template padrão ─────────────────────────
+function baixarTemplate() {
+  if (typeof XLSX === 'undefined') { alert('Biblioteca XLSX não carregada.'); return; }
+  const wb  = XLSX.utils.book_new();
+  const cols = COLUNAS_PADRAO.map(c=>c.nome);
+
+  // 3 linhas de exemplo
+  const exemplos = [
+    ['NF-2024-001','01/01/2024','31/01/2024',5000,'RECEITA','Empresa Alpha Ltda','PAGO','Contrato mensal'],
+    ['NF-2024-002','05/01/2024','05/02/2024',1200.50,'DESPESA OPERACIONAL','Fornecedor Beta S/A','PENDENTE',''],
+    ['NF-2024-003','10/01/2024','10/01/2024',3750,'CMV','Distribuidora Gamma','PAGO','Compra de mercadoria'],
+  ];
+
+  const wsData = [cols, ...exemplos];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [12,14,14,14,24,28,12,32].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'DADOS');
+
+  // Aba de instruções
+  const instrucoes = [
+    ['Coluna','Tipo','Obrigatório','Descrição / Opções válidas'],
+    ...COLUNAS_PADRAO.map(c=>[
+      c.nome,
+      c.tipo,
+      c.obrigatorio ? 'SIM' : 'não',
+      c.opcoes ? c.descricao||'' + ' | Opções: '+c.opcoes.join(', ') : (c.descricao||''),
+    ])
+  ];
+  const wsInst = XLSX.utils.aoa_to_sheet(instrucoes);
+  wsInst['!cols'] = [{wch:16},{wch:10},{wch:14},{wch:60}];
+  XLSX.utils.book_append_sheet(wb, wsInst, 'INSTRUÇÕES');
+
+  XLSX.writeFile(wb, 'template_padrao_toolkit.xlsx');
+}
 
 // ══════════════════════════════════════════════════════
 // DRAG & DROP
@@ -706,30 +909,48 @@ function carregarArquivo(file) {
 // CONFIG COLUNAS
 // ══════════════════════════════════════════════════════
 function mostrarConfigColunas(headers, cols) {
-  const labels = {
-    valor:'Coluna de Valor (R$)', data:'Coluna de Data', vencimento:'Coluna de Vencimento',
-    categoria:'Coluna de Categoria', entidade:'Coluna de Cliente/Entidade', chave:'Coluna Chave (ID/NF)',
+  const autoMatch = regex => headers.find(h => regex.test(String(h).trim())) || null;
+  const defaults = {
+    'NF':         autoMatch(PADROES_COLUNAS.chave),
+    'Data':       autoMatch(PADROES_COLUNAS.data),
+    'Vencimento': autoMatch(PADROES_COLUNAS.vencimento),
+    'Valor':      autoMatch(PADROES_COLUNAS.valor),
+    'Categoria':  autoMatch(PADROES_COLUNAS.categoria),
+    'Cliente':    autoMatch(PADROES_COLUNAS.entidade),
+    'Status':     null,
+    'Observacao': null,
   };
   const grid = document.getElementById('col-selects');
   grid.innerHTML = '';
-  for (const [tipo, label] of Object.entries(labels)) {
-    const div = document.createElement('div');
+  _dadosNormalizados = null;
+  document.getElementById('preview-padrao').style.display = 'none';
+  document.getElementById('btn-analisar').style.display   = 'none';
+  COLUNAS_PADRAO.forEach(col => {
+    const div    = document.createElement('div');
     div.className = 'col-group';
-    const sel = headers.map(h =>
-      `<option value="${h}" ${cols[tipo]===h?'selected':''}>${h}</option>`
+    const selId  = `sel-${col.nome.toLowerCase()}`;
+    const defVal = defaults[col.nome];
+    const req    = col.obrigatorio ? ' <span style="color:#C0392B">*</span>' : '';
+    const hint   = col.opcoes ? col.opcoes.slice(0,3).join(', ')+'…' : col.tipo;
+    const sel    = headers.map(h =>
+      `<option value="${h}" ${defVal===h?'selected':''}>${h}</option>`
     ).join('');
-    div.innerHTML = `<label>${label}</label>
-      <select id="sel-${tipo}"><option value="">(nenhuma)</option>${sel}</select>`;
+    div.innerHTML = `<label>${col.nome}${req} <small style="color:#8FA3BC;font-weight:400">(${hint})</small></label>
+      <select id="${selId}"><option value="">(nenhuma)</option>${sel}</select>`;
     grid.appendChild(div);
-  }
+  });
   document.getElementById('col-config').style.display = 'block';
 }
 
 function lerColsSelecionadas() {
-  const tipos = ['valor','data','vencimento','categoria','entidade','chave'];
-  const c = {};
-  tipos.forEach(t => { c[t] = document.getElementById(`sel-${t}`)?.value || null; });
-  return c;
+  return {
+    valor:      document.getElementById('sel-valor')?.value      || null,
+    data:       document.getElementById('sel-data')?.value       || null,
+    vencimento: document.getElementById('sel-vencimento')?.value || null,
+    categoria:  document.getElementById('sel-categoria')?.value  || null,
+    entidade:   document.getElementById('sel-cliente')?.value    || null,
+    chave:      document.getElementById('sel-nf')?.value         || null,
+  };
 }
 
 // ══════════════════════════════════════════════════════
@@ -739,8 +960,16 @@ function executarAnalise() {
   mostrarLoader(true);
   setTimeout(() => {
     try {
-      _cols = lerColsSelecionadas();
-      const dados = _dadosOriginais;
+      let dados;
+      if (_dadosNormalizados && _dadosNormalizados.length) {
+        dados = _dadosNormalizados;
+        _headers = COLUNAS_PADRAO.map(c => c.nome);
+        _cols = { valor:'Valor', data:'Data', vencimento:'Vencimento',
+                  categoria:'Categoria', entidade:'Cliente', chave:'NF' };
+      } else {
+        _cols = lerColsSelecionadas();
+        dados = _dadosOriginais;
+      }
 
       // KPIs
       const kpis = calcularKPIs(dados, _cols);

@@ -32,6 +32,7 @@ from toolkit_financeiro import (  # noqa: F401
     MontadorPlanilha,
     Verificador,
     PipelineFinanceiro,
+    Normalizador,
 )
 
 __all__ = [
@@ -42,4 +43,5 @@ __all__ = [
     "AnalistaFinanceiro", "AnalistaComercial", "Util",
     "PrestadorContas", "MontadorPlanilha",
     "Verificador", "PipelineFinanceiro",
+    "Normalizador",
 ]

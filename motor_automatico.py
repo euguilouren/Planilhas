@@ -28,7 +28,8 @@ import pandas as pd
 
 from toolkit_financeiro import (
     Leitor, Auditor, AnalistaFinanceiro, AnalistaComercial,
-    MontadorPlanilha, Verificador, Util, Status, validar_config
+    MontadorPlanilha, Verificador, Util, Status, validar_config,
+    Normalizador,
 )
 from relatorio_html import GeradorHTML
 
@@ -140,6 +141,42 @@ class ProcessadorArquivo:
             col_chav = self.cols.get('chave',      'NF')
             col_ent  = self.cols.get('entidade',   'Cliente')
             col_obrig = self.cfg.get('colunas_obrigatorias', [col_val, col_data])
+
+            # ── 1b. Conversão para planilha padrão ───────────────
+            logger.info("[1b] Convertendo para formato padrão do sistema...")
+            mapeamento_padrao = {
+                'NF':         col_chav,
+                'Data':       col_data,
+                'Vencimento': col_venc,
+                'Valor':      col_val,
+                'Categoria':  col_cat,
+                'Cliente':    col_ent,
+            }
+            df_padrao = Normalizador.para_padrao(df, mapeamento_padrao)
+
+            # Validar formato padrão antes de continuar
+            problemas_padrao = Normalizador.validar(df_padrao)
+            criticos_padrao  = [p for p in problemas_padrao if p['severidade'] == Status.CRITICA]
+            if criticos_padrao:
+                logger.warning("      %d problema(s) crítico(s) no formato padrão:", len(criticos_padrao))
+                for p in criticos_padrao:
+                    logger.warning("      [%s] %s: %s", p['severidade'], p['tipo'], p['descricao'])
+
+            # Salvar planilha padronizada
+            caminho_padrao = self.pasta_saida / f"padrao_{prefixo}.xlsx"
+            df_padrao.to_excel(str(caminho_padrao), index=False)
+            resultado['padrao'] = str(caminho_padrao)
+            logger.info("      Planilha padrão: %s", caminho_padrao.name)
+
+            # A partir daqui trabalha com o DataFrame padronizado
+            df      = df_padrao
+            col_val  = 'Valor'
+            col_cat  = 'Categoria'
+            col_data = 'Data'
+            col_venc = 'Vencimento'
+            col_chav = 'NF'
+            col_ent  = 'Cliente'
+            col_obrig = ['NF', 'Data', 'Valor']
 
             # ── 2. Auditoria ─────────────────────────────────────
             logger.info("[2/5] Auditoria...")
