@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: toolkit-config
+data:
+  redis-url: "redis://redis-service:6379/0"
+  pasta-jobs: "/tmp/toolkit_jobs"
+  log-level: "INFO"
+  access-token-expire-minutes: "15"
+  refresh-token-expire-days: "7"
+---
+# Exemplo de Secret (NÃO commitar com valores reais — use kubectl ou Vault)
+# kubectl create secret generic toolkit-secrets \
+#   --from-literal=jwt-secret-key=$(openssl rand -hex 32) \
+#   --from-literal=database-url='postgresql://user:pass@db:5432/toolkit'

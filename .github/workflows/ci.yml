@@ -7,6 +7,7 @@ on:
     branches: [main]
 
 jobs:
+  # ── Testes unitários e de integração ─────────────────────────────
   test:
     name: Testes (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -43,9 +44,69 @@ jobs:
             --cov=toolkit_financeiro \
             --cov=relatorio_html \
             --cov=motor_automatico \
+            --cov=dashboard_visual \
             --cov-report=term-missing \
+            --cov-fail-under=85 \
             --tb=short
 
+  # ── Lint: ruff + black ────────────────────────────────────────────
+  lint:
+    name: Lint (ruff + black)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar ferramentas de lint
+        run: pip install ruff black
+
+      - name: ruff check
+        run: ruff check . --output-format=github
+
+      - name: black check
+        run: black --check --diff .
+
+  # ── SAST: bandit (análise estática de segurança Python) ──────────
+  sast:
+    name: SAST — Bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar bandit
+        run: pip install bandit[toml]
+
+      - name: Executar bandit (falha em HIGH/MEDIUM)
+        run: |
+          bandit -r . \
+            --exclude ./.git,./tests,./build,./dist \
+            -ll \
+            -f txt
+
+  # ── Auditoria de dependências (bloqueante) ────────────────────────
+  security-audit:
+    name: Auditoria de segurança de dependências
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Executar pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --format=markdown
+
+  # ── Validação do index.html ───────────────────────────────────────
   validate-html:
     name: Validar index.html
     runs-on: ubuntu-latest
@@ -63,19 +124,7 @@ jobs:
           print('index.html: OK')
           "
 
-  security-audit:
-    name: Auditoria de segurança de dependências
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Executar pip-audit
-        run: |
-          pip install pip-audit
-          pip-audit -r requirements.txt --format=markdown || true
-
+  # ── Validação do config.yaml ──────────────────────────────────────
   validate-config:
     name: Validar config.yaml
     runs-on: ubuntu-latest

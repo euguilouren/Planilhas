@@ -101,11 +101,23 @@ class ProcessadorArquivo:
             except Exception:
                 pass
 
-    MAX_TAMANHO_BYTES = 100 * 1024 * 1024  # 100 MB
+    MAX_TAMANHO_BYTES = 50 * 1024 * 1024  # 50 MB
+
+    # Magic bytes: assinatura binária esperada por tipo de extensão
+    _MAGIC_BYTES: dict = {
+        '.xlsx': b'PK\x03\x04',   # ZIP (Open XML)
+        '.xlsm': b'PK\x03\x04',
+        '.xls':  b'\xd0\xcf\x11\xe0',  # OLE2 Compound Document
+        '.csv':  None,  # texto — sem assinatura binária obrigatória
+        '.tsv':  None,
+    }
+
+    # Prefixos que iniciam fórmulas CSV injection em planilhas
+    _PREFIXOS_INJECAO = ('=', '+', '-', '@', '\t', '\r')
 
     @staticmethod
     def _validar_caminho_arquivo(caminho: str, max_bytes: int = None) -> Path:
-        """Resolve o caminho, bloqueia symlinks e valida tamanho máximo."""
+        """Resolve o caminho, bloqueia path traversal e valida tamanho máximo."""
         try:
             p = Path(caminho).resolve()
         except (OSError, ValueError) as exc:
@@ -122,12 +134,48 @@ class ProcessadorArquivo:
             pass  # arquivo ainda não existe ou sem permissão de stat — será tratado em processar()
         return p
 
+    @staticmethod
+    def _validar_magic_bytes(caminho: Path) -> None:
+        """Garante que o conteúdo binário corresponde à extensão declarada."""
+        ext = caminho.suffix.lower()
+        assinatura = ProcessadorArquivo._MAGIC_BYTES.get(ext)
+        if assinatura is None:
+            return  # CSV/TSV: sem validação binária
+        try:
+            with open(caminho, 'rb') as fh:
+                cabecalho = fh.read(len(assinatura))
+        except OSError:
+            return  # será tratado no processar()
+        if cabecalho != assinatura:
+            raise ValueError(
+                f"Arquivo '{caminho.name}' não corresponde ao formato {ext.upper()} esperado. "
+                "Possível arquivo renomeado ou corrompido."
+            )
+
+    @staticmethod
+    def _sanitizar_csv_injection(df: pd.DataFrame) -> pd.DataFrame:
+        """Prefixar células de texto que começam com operadores de fórmula."""
+        prefixos = ProcessadorArquivo._PREFIXOS_INJECAO
+
+        def _sanitizar_celula(valor):
+            if isinstance(valor, str) and valor.startswith(prefixos):
+                return "'" + valor
+            return valor
+
+        colunas_str = df.select_dtypes(include='object').columns
+        df = df.copy()
+        for col in colunas_str:
+            df[col] = df[col].map(_sanitizar_celula)
+        return df
+
     def processar(self, caminho_arquivo: str) -> dict:
         """
         Pipeline completo: lê → audita → analisa → gera HTML + Excel.
         Retorna dict com caminhos dos arquivos gerados e resumo.
         """
-        caminho_arquivo = str(self._validar_caminho_arquivo(caminho_arquivo))
+        p_validado = self._validar_caminho_arquivo(caminho_arquivo)
+        self._validar_magic_bytes(p_validado)
+        caminho_arquivo = str(p_validado)
         nome_base = Path(caminho_arquivo).stem
         timestamp = datetime.now(tz=timezone.utc).strftime('%Y%m%d_%H%M%S')
         prefixo   = f"{nome_base}_{timestamp}"
@@ -190,7 +238,8 @@ class ProcessadorArquivo:
                 for p in criticos_padrao:
                     logger.warning("      [%s] %s: %s", p['severidade'], p['tipo'], p['descricao'])
 
-            # Salvar planilha padronizada
+            # Salvar planilha padronizada (sanitizada contra CSV injection)
+            df_padrao = self._sanitizar_csv_injection(df_padrao)
             caminho_padrao = self.pasta_saida / f"padrao_{prefixo}.xlsx"
             df_padrao.to_excel(str(caminho_padrao), index=False)
             resultado['padrao'] = str(caminho_padrao)
@@ -285,8 +334,9 @@ class ProcessadorArquivo:
             logger.info("[5/5] Gerando Excel...")
             caminho_xlsx = self.pasta_saida / f"resultado_{prefixo}.xlsx"
             montador = MontadorPlanilha()
+            df_seguro = self._sanitizar_csv_injection(df)
 
-            montador.adicionar_aba('Dados', df, titulo=f'DADOS — {nome_aba}',
+            montador.adicionar_aba('Dados', df_seguro, titulo=f'DADOS — {nome_aba}',
                 cols_moeda=[col_val] if col_val in df.columns else [],
                 cols_data=[col_data] if col_data in df.columns else [],
                 cols_soma=[col_val]  if col_val in df.columns else [])

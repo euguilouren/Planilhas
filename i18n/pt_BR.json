@@ -1,0 +1,65 @@
+{
+  "app.title": "Toolkit Financeiro",
+  "app.subtitle": "Análise Financeira Automatizada",
+
+  "kpi.receita_total": "Receita Total",
+  "kpi.despesa_total": "Despesa Total",
+  "kpi.resultado_liquido": "Resultado Líquido",
+  "kpi.nfs_vendidas": "NFs Vendidas",
+  "kpi.nfs_recebidas": "NFs Recebidas",
+  "kpi.margem_pct": "Margem %",
+  "kpi.ticket_medio": "Ticket Médio",
+  "kpi.total_registros": "Total Registros",
+
+  "section.fluxo": "Fluxo por Período",
+  "section.dre": "DRE Simplificada",
+  "section.pareto": "Top Clientes / Fornecedores",
+  "section.aging": "Aging de Vencimentos",
+  "section.auditoria": "Auditoria",
+  "section.forecast": "Projeção de Caixa",
+  "section.conciliacao": "Conciliação Bancária",
+
+  "tab.diario": "Diário",
+  "tab.mensal": "Mensal",
+  "tab.anual": "Anual",
+
+  "col.periodo": "Período",
+  "col.receita_rs": "Receita (R$)",
+  "col.nfs_receita": "NFs Vendidas",
+  "col.despesa_rs": "Despesa (R$)",
+  "col.nfs_despesa": "NFs Recebidas",
+  "col.resultado_rs": "Resultado (R$)",
+  "col.resultado_pct": "Resultado %",
+  "col.total": "Total",
+
+  "status.ok": "OK",
+  "status.alerta": "ALERTA",
+  "status.erro": "ERRO",
+  "status.critico": "CRÍTICO",
+  "status.concluido": "Análise concluída. Dados prontos para apresentação.",
+  "status.problemas": "{n} problema(s) crítico(s) encontrado(s).",
+
+  "tipo.receita": "RECEITA",
+  "tipo.despesa": "DESPESA",
+  "tipo.outro": "OUTRO",
+
+  "conciliacao.conciliado": "CONCILIADO",
+  "conciliacao.pendente": "PENDENTE",
+  "conciliacao.divergente": "DIVERGENTE",
+
+  "forecast.alerta_negativo": "⚠️ Saldo projetado negativo em {dias} dias (R$ {valor})",
+  "forecast.ok": "✅ Projeção positiva para todos os horizontes",
+
+  "btn.exportar_pdf": "Exportar PDF",
+  "btn.exportar_ppt": "Exportar PPT",
+  "btn.sincronizar_erp": "Sincronizar ERP",
+  "btn.ver_detalhes": "Ver Detalhes",
+
+  "upload.instrucao": "Arraste uma planilha (.xlsx, .csv) ou clique para selecionar",
+  "upload.processando": "Processando...",
+  "upload.sucesso": "Arquivo processado com sucesso!",
+  "upload.erro": "Erro ao processar arquivo.",
+
+  "footer.gerado_por": "Gerado por Toolkit Financeiro",
+  "footer.data": "Gerado em"
+}
