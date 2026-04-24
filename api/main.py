@@ -11,6 +11,7 @@ Variáveis de ambiente:
     REDIS_URL        — URL do Redis (padrão: redis://localhost:6379/0)
     PASTA_JOBS       — pasta para arquivos temporários de jobs
 """
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 

@@ -15,15 +15,18 @@ from datetime import datetime
 import pandas as pd
 
 from toolkit_financeiro import (
-    Leitor, Auditor, Conciliador, AnalistaFinanceiro,
-    AnalistaComercial, MontadorPlanilha, Verificador,
-    PipelineFinanceiro, Util, PrestadorContas, Status
+    AnalistaComercial,
+    AnalistaFinanceiro,
+    Auditor,
+    Leitor,
+    MontadorPlanilha,
+    Status,
 )
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%d/%m/%Y %H:%M:%S',
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%d/%m/%Y %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -31,16 +34,16 @@ logger = logging.getLogger(__name__)
 # CONFIGURAÇÃO — edite aqui
 # ══════════════════════════════════════════════════════════════════
 
-ARQUIVO_ENTRADA = "minha_planilha.xlsx"   # nome do seu arquivo
-ARQUIVO_SAIDA   = "resultado.xlsx"        # nome do arquivo de saída
-ARQUIVO_BRIEFING = "briefing.txt"         # resumo para colar no Claude
+ARQUIVO_ENTRADA = "minha_planilha.xlsx"  # nome do seu arquivo
+ARQUIVO_SAIDA = "resultado.xlsx"  # nome do arquivo de saída
+ARQUIVO_BRIEFING = "briefing.txt"  # resumo para colar no Claude
 
 # Nomes das colunas do SEU arquivo (ajuste conforme necessário)
-COL_VALOR       = "Valor"        # coluna com valores monetários
-COL_CATEGORIA   = "Categoria"    # coluna com categorias/descrições
-COL_DATA        = "Data"         # coluna de datas
-COL_CHAVE       = "NF"           # coluna chave única (nota fiscal, ID, etc.)
-COL_ENTIDADE    = "Cliente"      # coluna de cliente/fornecedor
+COL_VALOR = "Valor"  # coluna com valores monetários
+COL_CATEGORIA = "Categoria"  # coluna com categorias/descrições
+COL_DATA = "Data"  # coluna de datas
+COL_CHAVE = "NF"  # coluna chave única (nota fiscal, ID, etc.)
+COL_ENTIDADE = "Cliente"  # coluna de cliente/fornecedor
 
 # Colunas obrigatórias para checar se estão vazias
 COLUNAS_OBRIGATORIAS = [COL_VALOR, COL_DATA, COL_CHAVE]
@@ -48,6 +51,7 @@ COLUNAS_OBRIGATORIAS = [COL_VALOR, COL_DATA, COL_CHAVE]
 # ══════════════════════════════════════════════════════════════════
 # EXECUÇÃO — não precisa editar abaixo
 # ══════════════════════════════════════════════════════════════════
+
 
 def main() -> None:
     print(f"\n{'='*55}")
@@ -67,8 +71,8 @@ def main() -> None:
     # ── 2. Ler e diagnosticar ────────────────────────────────────
     print("[1/5] Lendo arquivo e gerando diagnóstico...")
     resultado = Leitor.ler_arquivo(ARQUIVO_ENTRADA)
-    dados       = resultado['dados']
-    diagnostico = resultado['diagnostico']
+    dados = resultado["dados"]
+    diagnostico = resultado["diagnostico"]
     print(Leitor.resumo_diagnostico(diagnostico))
 
     # Pegar a primeira aba como principal
@@ -85,28 +89,36 @@ def main() -> None:
         if len(dups):
             print(f"      [ALERTA] {len(dups)} possíveis duplicatas encontradas")
             for _, row in dups.iterrows():
-                inconsistencias.append({
-                    'aba': nome_aba, 'linha': int(row.get('_linha_excel', 0)),
-                    'coluna': COL_CHAVE, 'tipo': 'DUPLICATA',
-                    'severidade': Status.CRITICA,
-                    'valor': str(row.get(COL_CHAVE, '')),
-                    'descricao': f"Duplicata em '{COL_CHAVE}'",
-                    'impacto_rs': 0,
-                })
+                inconsistencias.append(
+                    {
+                        "aba": nome_aba,
+                        "linha": int(row.get("_linha_excel", 0)),
+                        "coluna": COL_CHAVE,
+                        "tipo": "DUPLICATA",
+                        "severidade": Status.CRITICA,
+                        "valor": str(row.get(COL_CHAVE, "")),
+                        "descricao": f"Duplicata em '{COL_CHAVE}'",
+                        "impacto_rs": 0,
+                    }
+                )
 
     if COL_VALOR in df.columns:
         outliers = Auditor.detectar_outliers(df, COL_VALOR, aba=nome_aba)
         if len(outliers):
             print(f"      [ALERTA] {len(outliers)} outliers detectados em '{COL_VALOR}'")
             for _, row in outliers.iterrows():
-                inconsistencias.append({
-                    'aba': nome_aba, 'linha': int(row.get('_linha_excel', 0)),
-                    'coluna': COL_VALOR, 'tipo': 'OUTLIER',
-                    'severidade': Status.MEDIA,
-                    'valor': str(row.get(COL_VALOR, '')),
-                    'descricao': f"Valor fora do padrão (±{row.get('_desvio_padrao','')})",
-                    'impacto_rs': 0,
-                })
+                inconsistencias.append(
+                    {
+                        "aba": nome_aba,
+                        "linha": int(row.get("_linha_excel", 0)),
+                        "coluna": COL_VALOR,
+                        "tipo": "OUTLIER",
+                        "severidade": Status.MEDIA,
+                        "valor": str(row.get(COL_VALOR, "")),
+                        "descricao": f"Valor fora do padrão (±{row.get('_desvio_padrao','')})",
+                        "impacto_rs": 0,
+                    }
+                )
 
     if COL_DATA in df.columns:
         temp = Auditor.detectar_inconsistencias_temporais(df, COL_DATA, aba=nome_aba)
@@ -114,12 +126,10 @@ def main() -> None:
         if temp:
             print(f"      [ALERTA] {len(temp)} inconsistências de data encontradas")
 
-    inconsistencias.extend(
-        Auditor.detectar_campos_vazios(df, COLUNAS_OBRIGATORIAS, nome_aba)
-    )
+    inconsistencias.extend(Auditor.detectar_campos_vazios(df, COLUNAS_OBRIGATORIAS, nome_aba))
 
     df_auditoria = Auditor.relatorio_auditoria(inconsistencias)
-    criticos = len(df_auditoria[df_auditoria['Severidade'] == Status.CRITICA]) if len(df_auditoria) else 0
+    criticos = len(df_auditoria[df_auditoria["Severidade"] == Status.CRITICA]) if len(df_auditoria) else 0
     print(f"      Total de problemas: {len(inconsistencias)} ({criticos} críticos)\n")
 
     # ── 4. Análises ──────────────────────────────────────────────
@@ -170,17 +180,19 @@ def main() -> None:
 
     # Aba de dados brutos
     montador.adicionar_aba(
-        "Dados", df,
+        "Dados",
+        df,
         titulo=f"DADOS — {nome_aba}",
         cols_moeda=[COL_VALOR] if COL_VALOR in df.columns else [],
-        cols_data=[COL_DATA]   if COL_DATA  in df.columns else [],
-        cols_soma=[COL_VALOR]  if COL_VALOR in df.columns else [],
+        cols_data=[COL_DATA] if COL_DATA in df.columns else [],
+        cols_soma=[COL_VALOR] if COL_VALOR in df.columns else [],
     )
 
     # Aba de auditoria
     if len(df_auditoria):
         montador.adicionar_aba(
-            "Auditoria", df_auditoria,
+            "Auditoria",
+            df_auditoria,
             titulo="LOG DE AUDITORIA",
             col_status="Severidade",
             cols_moeda=["Impacto R$"] if "Impacto R$" in df_auditoria.columns else [],
@@ -189,7 +201,8 @@ def main() -> None:
     # Aba de aging
     if df_aging is not None and len(df_aging):
         montador.adicionar_aba(
-            "Aging", df_aging,
+            "Aging",
+            df_aging,
             titulo="ANÁLISE DE AGING",
             cols_moeda=["Total_RS"],
         )
@@ -197,7 +210,8 @@ def main() -> None:
     # Aba de DRE
     if df_dre is not None and len(df_dre):
         montador.adicionar_aba(
-            "DRE", df_dre,
+            "DRE",
+            df_dre,
             titulo="DEMONSTRATIVO DE RESULTADO",
             cols_moeda=["Valor_RS"],
             adicionar_totais=False,
@@ -206,7 +220,8 @@ def main() -> None:
     # Aba de Pareto
     if df_pareto is not None and len(df_pareto):
         montador.adicionar_aba(
-            "Pareto", df_pareto,
+            "Pareto",
+            df_pareto,
             titulo="ANÁLISE PARETO",
             cols_moeda=["Total_RS"],
         )
@@ -214,15 +229,16 @@ def main() -> None:
     # Resumo executivo com métricas-chave
     metricas = {}
     if COL_VALOR in df.columns:
-        total = pd.to_numeric(df[COL_VALOR], errors='coerce').sum()
-        media = pd.to_numeric(df[COL_VALOR], errors='coerce').mean()
-        metricas["Total Geral"] = {'valor': total, 'tipo': 'moeda', 'status': Status.OK}
-        metricas["Ticket Médio"] = {'valor': media, 'tipo': 'moeda', 'status': Status.OK}
-    metricas["Total de Registros"] = {'valor': len(df), 'tipo': 'numero', 'status': Status.OK}
+        total = pd.to_numeric(df[COL_VALOR], errors="coerce").sum()
+        media = pd.to_numeric(df[COL_VALOR], errors="coerce").mean()
+        metricas["Total Geral"] = {"valor": total, "tipo": "moeda", "status": Status.OK}
+        metricas["Ticket Médio"] = {"valor": media, "tipo": "moeda", "status": Status.OK}
+    metricas["Total de Registros"] = {"valor": len(df), "tipo": "numero", "status": Status.OK}
     metricas["Problemas Críticos"] = {
-        'valor': criticos, 'tipo': 'numero',
-        'status': Status.OK if criticos == 0 else Status.DIVERGENTE,
-        'obs': f"{len(inconsistencias)} total de alertas",
+        "valor": criticos,
+        "tipo": "numero",
+        "status": Status.OK if criticos == 0 else Status.DIVERGENTE,
+        "obs": f"{len(inconsistencias)} total de alertas",
     }
     montador.adicionar_resumo_executivo(metricas)
     montador.salvar(ARQUIVO_SAIDA)
@@ -230,11 +246,8 @@ def main() -> None:
 
     # ── 6. Gerar briefing para o Claude ─────────────────────────
     print("[5/5] Gerando briefing para o Claude...")
-    briefing = _gerar_briefing(
-        df, diagnostico, df_auditoria, df_dre,
-        df_aging, df_pareto, df_ticket, inconsistencias
-    )
-    with open(ARQUIVO_BRIEFING, 'w', encoding='utf-8') as f:
+    briefing = _gerar_briefing(df, diagnostico, df_auditoria, df_dre, df_aging, df_pareto, df_ticket, inconsistencias)
+    with open(ARQUIVO_BRIEFING, "w", encoding="utf-8") as f:
         f.write(briefing)
     print(f"      Briefing salvo: {ARQUIVO_BRIEFING}")
     print(f"\n{'='*55}")
@@ -244,8 +257,7 @@ def main() -> None:
     print(f"{'='*55}\n")
 
 
-def _gerar_briefing(df, diagnostico, df_auditoria, df_dre,
-                    df_aging, df_pareto, df_ticket, inconsistencias) -> str:
+def _gerar_briefing(df, diagnostico, df_auditoria, df_dre, df_aging, df_pareto, df_ticket, inconsistencias) -> str:
     """Gera texto compacto com os achados principais — para colar no Claude."""
     linhas = [
         f"# BRIEFING FINANCEIRO — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
@@ -255,9 +267,9 @@ def _gerar_briefing(df, diagnostico, df_auditoria, df_dre,
     ]
 
     # Diagnóstico de formato
-    if diagnostico['problemas_formato']:
+    if diagnostico["problemas_formato"]:
         linhas.append(f"## Problemas de formato ({len(diagnostico['problemas_formato'])})")
-        for p in diagnostico['problemas_formato']:
+        for p in diagnostico["problemas_formato"]:
             linhas.append(f"- [{p['severidade']}] {p['descricao']}")
         linhas.append("")
 
@@ -265,18 +277,20 @@ def _gerar_briefing(df, diagnostico, df_auditoria, df_dre,
     if len(df_auditoria):
         linhas.append(f"## Auditoria — {len(df_auditoria)} problemas encontrados")
         for sev in [Status.CRITICA, Status.ALTA, Status.MEDIA, Status.BAIXA]:
-            subset = df_auditoria[df_auditoria['Severidade'] == sev]
+            subset = df_auditoria[df_auditoria["Severidade"] == sev]
             if len(subset):
                 linhas.append(f"\n### {sev} ({len(subset)})")
                 for _, row in subset.head(10).iterrows():
-                    linhas.append(f"- Linha {row.get('Linha','?')} | {row.get('Coluna','?')} | {row.get('Descrição','')}")
+                    linhas.append(
+                        f"- Linha {row.get('Linha','?')} | {row.get('Coluna','?')} | {row.get('Descrição','')}"
+                    )
         linhas.append("")
 
     # DRE resumido
     if df_dre is not None and len(df_dre):
         linhas.append("## DRE Resumido")
         for _, row in df_dre.iterrows():
-            av = f" ({row['AV_%']:.1f}%)" if 'AV_%' in row and pd.notna(row.get('AV_%')) else ""
+            av = f" ({row['AV_%']:.1f}%)" if "AV_%" in row and pd.notna(row.get("AV_%")) else ""
             linhas.append(f"  {row['Linha_DRE']:<40} R$ {row['Valor_RS']:>15,.2f}{av}")
         linhas.append("")
 
@@ -284,7 +298,9 @@ def _gerar_briefing(df, diagnostico, df_auditoria, df_dre,
     if df_aging is not None and len(df_aging):
         linhas.append("## Aging de Recebíveis")
         for _, row in df_aging.iterrows():
-            linhas.append(f"  {row['Faixa_Aging']:<25} {row['Quantidade']:>5} itens  R$ {row['Total_RS']:>12,.2f}  ({row.get('Percentual',0):.1f}%)")
+            linhas.append(
+                f"  {row['Faixa_Aging']:<25} {row['Quantidade']:>5} itens  R$ {row['Total_RS']:>12,.2f}  ({row.get('Percentual',0):.1f}%)"
+            )
         linhas.append("")
 
     # Pareto top 5
@@ -292,15 +308,19 @@ def _gerar_briefing(df, diagnostico, df_auditoria, df_dre,
         linhas.append("## Top 5 por Faturamento (Pareto)")
         for _, row in df_pareto.head(5).iterrows():
             col_entidade = df_pareto.columns[0]
-            linhas.append(f"  #{int(row['Ranking'])} {str(row[col_entidade]):<30} R$ {row['Total_RS']:>12,.2f}  ({row['Percentual']:.1f}%)")
+            linhas.append(
+                f"  #{int(row['Ranking'])} {str(row[col_entidade]):<30} R$ {row['Total_RS']:>12,.2f}  ({row['Percentual']:.1f}%)"
+            )
         linhas.append("")
 
     # Ticket médio
     if df_ticket is not None and len(df_ticket):
         linhas.append("## Ticket Médio")
-        if 'Ticket_Medio_RS' in df_ticket.columns:
+        if "Ticket_Medio_RS" in df_ticket.columns:
             for _, row in df_ticket.head(5).iterrows():
-                linhas.append(f"  Ticket médio: R$ {row['Ticket_Medio_RS']:,.2f} | {int(row.get('Transações',0))} transações")
+                linhas.append(
+                    f"  Ticket médio: R$ {row['Ticket_Medio_RS']:,.2f} | {int(row.get('Transações',0))} transações"
+                )
         linhas.append("")
 
     linhas += [
@@ -311,7 +331,7 @@ def _gerar_briefing(df, diagnostico, df_auditoria, df_dre,
         "2. O que o DRE indica sobre a saúde financeira?",
         "3. Quais ações recomenda com base no aging?",
     ]
-    return '\n'.join(linhas)
+    return "\n".join(linhas)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 """Schemas Pydantic para request/response da API."""
+
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
-
 # ── Auth ─────────────────────────────────────────────────────────────
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -26,6 +26,7 @@ class TokenData(BaseModel):
 
 # ── Tenants ──────────────────────────────────────────────────────────
 
+
 class TenantCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=200)
     slug: str = Field(min_length=2, max_length=100, pattern=r"^[a-z0-9\-]+$")
@@ -42,6 +43,7 @@ class TenantResponse(BaseModel):
 
 
 # ── Usuários ─────────────────────────────────────────────────────────
+
 
 class UsuarioCreate(BaseModel):
     email: EmailStr
@@ -61,14 +63,15 @@ class UsuarioResponse(BaseModel):
 
 # ── Jobs ─────────────────────────────────────────────────────────────
 
+
 class JobResponse(BaseModel):
     id: int
     arquivo_nome: str
     status: str
     progresso_pct: int
-    resultado_json: Optional[str] = None
-    erro_mensagem: Optional[str] = None
+    resultado_json: str | None = None
+    erro_mensagem: str | None = None
     criado_em: datetime
-    concluido_em: Optional[datetime] = None
+    concluido_em: datetime | None = None
 
     model_config = {"from_attributes": True}

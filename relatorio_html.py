@@ -17,30 +17,30 @@ class GeradorHTML:
 
     def __init__(self, config: dict):
         self.cfg = config
-        self.tema = config.get('relatorio', {}).get('tema', {})
-        self.COR_P   = self.tema.get('cor_primaria',    '#1A3556')
-        self.COR_S   = self.tema.get('cor_secundaria',  '#C9A227')
-        self.COR_DARK= self.tema.get('cor_dark',         '#0D1B2A')
-        self.COR_OK  = self.tema.get('cor_ok',           '#D1FAE5')
-        self.COR_OK_T= self.tema.get('cor_ok_text',      '#065F46')
-        self.COR_AL  = self.tema.get('cor_alerta',       '#FEF3C7')
-        self.COR_AL_T= self.tema.get('cor_alerta_text',  '#92400E')
-        self.COR_CR  = self.tema.get('cor_critico',      '#FEE2E2')
-        self.COR_CR_T= self.tema.get('cor_critico_text', '#991B1B')
+        self.tema = config.get("relatorio", {}).get("tema", {})
+        self.COR_P = self.tema.get("cor_primaria", "#1A3556")
+        self.COR_S = self.tema.get("cor_secundaria", "#C9A227")
+        self.COR_DARK = self.tema.get("cor_dark", "#0D1B2A")
+        self.COR_OK = self.tema.get("cor_ok", "#D1FAE5")
+        self.COR_OK_T = self.tema.get("cor_ok_text", "#065F46")
+        self.COR_AL = self.tema.get("cor_alerta", "#FEF3C7")
+        self.COR_AL_T = self.tema.get("cor_alerta_text", "#92400E")
+        self.COR_CR = self.tema.get("cor_critico", "#FEE2E2")
+        self.COR_CR_T = self.tema.get("cor_critico_text", "#991B1B")
 
     def gerar(
         self,
-        arquivo_origem:  str,
-        df_dados:        pd.DataFrame,
-        df_auditoria:    pd.DataFrame,
-        df_aging:        pd.DataFrame  = None,
-        df_dre:          pd.DataFrame  = None,
-        df_pareto:       pd.DataFrame  = None,
-        df_ticket:       pd.DataFrame  = None,
-        diagnostico:     dict          = None,
-        df_fluxo_diario: pd.DataFrame  = None,
-        df_fluxo_mensal: pd.DataFrame  = None,
-        df_fluxo_anual:  pd.DataFrame  = None,
+        arquivo_origem: str,
+        df_dados: pd.DataFrame,
+        df_auditoria: pd.DataFrame,
+        df_aging: pd.DataFrame = None,
+        df_dre: pd.DataFrame = None,
+        df_pareto: pd.DataFrame = None,
+        df_ticket: pd.DataFrame = None,
+        diagnostico: dict = None,
+        df_fluxo_diario: pd.DataFrame = None,
+        df_fluxo_mensal: pd.DataFrame = None,
+        df_fluxo_anual: pd.DataFrame = None,
     ) -> str:
         """Gera relatório HTML autocontido a partir dos dados processados.
 
@@ -58,15 +58,19 @@ class GeradorHTML:
             String HTML completa pronta para ser salva em disco.
         """
         logger.info("Gerando relatório HTML para: %s", arquivo_origem)
-        empresa = self._esc(self.cfg.get('relatorio', {}).get('empresa', 'Empresa'))
-        titulo  = self._esc(self.cfg.get('relatorio', {}).get('titulo',  'Relatório Financeiro'))
-        agora   = datetime.now().strftime('%d/%m/%Y %H:%M')
+        empresa = self._esc(self.cfg.get("relatorio", {}).get("empresa", "Empresa"))
+        titulo = self._esc(self.cfg.get("relatorio", {}).get("titulo", "Relatório Financeiro"))
+        agora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
         # KPIs principais
         total_registros = len(df_dados)
-        col_valor = self.cfg.get('colunas', {}).get('valor', 'Valor')
-        total_valor = pd.to_numeric(df_dados.get(col_valor, pd.Series(dtype=float)), errors='coerce').sum() if col_valor in df_dados.columns else 0
-        total_criticos = len(df_auditoria[df_auditoria['Severidade'] == 'CRÍTICA']) if len(df_auditoria) else 0
+        col_valor = self.cfg.get("colunas", {}).get("valor", "Valor")
+        total_valor = (
+            pd.to_numeric(df_dados.get(col_valor, pd.Series(dtype=float)), errors="coerce").sum()
+            if col_valor in df_dados.columns
+            else 0
+        )
+        total_criticos = len(df_auditoria[df_auditoria["Severidade"] == "CRÍTICA"]) if len(df_auditoria) else 0
         total_problemas = len(df_auditoria)
 
         html = f"""<!DOCTYPE html>
@@ -135,8 +139,8 @@ class GeradorHTML:
 <main class="container" role="main" aria-label="Relatório financeiro">
 """
         # ── KPIs ──────────────────────────────────────────────────
-        kpi_critico_class = 'critico' if total_criticos > 0 else 'ok'
-        kpi_prob_class    = 'critico' if total_criticos > 0 else ('ok' if total_problemas == 0 else '')
+        kpi_critico_class = "critico" if total_criticos > 0 else "ok"
+        kpi_prob_class = "critico" if total_criticos > 0 else ("ok" if total_problemas == 0 else "")
         html += f"""
   <section class="kpis" role="region" aria-label="Indicadores principais">
     <div class="kpi" role="article" aria-label="Total de registros: {total_registros:,}">
@@ -162,7 +166,7 @@ class GeradorHTML:
   </section>
 """
         # ── Diagnóstico de Formato ─────────────────────────────────
-        if diagnostico and diagnostico.get('problemas_formato'):
+        if diagnostico and diagnostico.get("problemas_formato"):
             html += self._secao_diagnostico(diagnostico)
 
         # ── Auditoria ─────────────────────────────────────────────
@@ -180,8 +184,7 @@ class GeradorHTML:
             html += self._secao_aging(df_aging)
 
         # ── Fluxo por Período ─────────────────────────────────────
-        if any(df is not None and len(df) > 0
-               for df in [df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual]):
+        if any(df is not None and len(df) > 0 for df in [df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual]):
             html += self._secao_fluxo(df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual)
 
         # ── DRE ───────────────────────────────────────────────────
@@ -208,12 +211,13 @@ class GeradorHTML:
     @staticmethod
     def _esc(val) -> str:
         if val is None:
-            return ''
+            return ""
         return html.escape(str(val))
 
     def _badge(self, sev: str) -> str:
-        cls = {'CRÍTICA': 'critica', 'ALTA': 'alta', 'MÉDIA': 'media',
-               'BAIXA': 'baixa', 'OK': 'ok'}.get(sev.upper(), 'media')
+        cls = {"CRÍTICA": "critica", "ALTA": "alta", "MÉDIA": "media", "BAIXA": "baixa", "OK": "ok"}.get(
+            sev.upper(), "media"
+        )
         return f'<span class="badge badge-{cls}" role="status" aria-label="Severidade: {self._esc(sev)}">{self._esc(sev)}</span>'
 
     def gerar_pdf(self, html_str: str, caminho_pdf: str) -> bool:
@@ -228,23 +232,23 @@ class GeradorHTML:
         """
         try:
             from weasyprint import HTML as WeasyprintHTML  # optional dependency
+
             WeasyprintHTML(string=html_str).write_pdf(caminho_pdf)
             logger.info("PDF gerado: %s", caminho_pdf)
             return True
         except ImportError:
-            logger.warning(
-                "WeasyPrint não instalado — PDF ignorado. "
-                "Instale com: pip install weasyprint"
-            )
+            logger.warning("WeasyPrint não instalado — PDF ignorado. " "Instale com: pip install weasyprint")
             return False
 
     def _secao_diagnostico(self, diag: dict) -> str:
-        rows = ''
-        for p in diag['problemas_formato']:
-            rows += (f"<tr><td>{self._esc(p.get('aba',''))}</td>"
-                     f"<td>{self._esc(p.get('coluna',''))}</td>"
-                     f"<td>{self._badge(p.get('severidade',''))}</td>"
-                     f"<td>{self._esc(p.get('descricao',''))}</td></tr>")
+        rows = ""
+        for p in diag["problemas_formato"]:
+            rows += (
+                f"<tr><td>{self._esc(p.get('aba',''))}</td>"
+                f"<td>{self._esc(p.get('coluna',''))}</td>"
+                f"<td>{self._badge(p.get('severidade',''))}</td>"
+                f"<td>{self._esc(p.get('descricao',''))}</td></tr>"
+            )
         return f"""
   <section class="card" role="region" aria-label="Problemas de formato detectados">
     <h2>⚠ Problemas de Formato ({len(diag['problemas_formato'])})</h2>
@@ -256,20 +260,22 @@ class GeradorHTML:
 """
 
     def _secao_auditoria(self, df: pd.DataFrame) -> str:
-        rows = ''
+        rows = ""
         for _, r in df.iterrows():
-            sev   = str(r.get('Severidade', ''))
-            linha = str(r.get('Linha', ''))
-            if isinstance(r.get('Linha'), list):
-                linha = ', '.join(str(x) for x in r['Linha'][:5])
-            imp = r.get('Impacto R$', '')
-            imp_str = f"R$ {float(imp):,.2f}" if imp and str(imp) not in ('', '0', '0.0') else '—'
-            rows += (f"<tr><td>{self._badge(sev)}</td>"
-                     f"<td>{self._esc(r.get('Tipo',''))}</td>"
-                     f"<td>{self._esc(linha)}</td>"
-                     f"<td>{self._esc(r.get('Coluna',''))}</td>"
-                     f"<td>{self._esc(r.get('Descrição',''))}</td>"
-                     f"<td style='text-align:right'>{imp_str}</td></tr>")
+            sev = str(r.get("Severidade", ""))
+            linha = str(r.get("Linha", ""))
+            if isinstance(r.get("Linha"), list):
+                linha = ", ".join(str(x) for x in r["Linha"][:5])
+            imp = r.get("Impacto R$", "")
+            imp_str = f"R$ {float(imp):,.2f}" if imp and str(imp) not in ("", "0", "0.0") else "—"
+            rows += (
+                f"<tr><td>{self._badge(sev)}</td>"
+                f"<td>{self._esc(r.get('Tipo',''))}</td>"
+                f"<td>{self._esc(linha)}</td>"
+                f"<td>{self._esc(r.get('Coluna',''))}</td>"
+                f"<td>{self._esc(r.get('Descrição',''))}</td>"
+                f"<td style='text-align:right'>{imp_str}</td></tr>"
+            )
         return f"""
   <section class="card" role="region" aria-label="Log de auditoria com {len(df)} problemas">
     <h2>🔍 Log de Auditoria ({len(df)} problemas)</h2>
@@ -283,27 +289,29 @@ class GeradorHTML:
 """
 
     def _secao_aging(self, df: pd.DataFrame) -> str:
-        if 'Total_RS' not in df.columns or 'Faixa_Aging' not in df.columns:
+        if "Total_RS" not in df.columns or "Faixa_Aging" not in df.columns:
             logger.warning("_secao_aging: colunas esperadas ausentes no DataFrame de aging.")
-            return ''
-        total = df['Total_RS'].sum()
-        rows = ''
+            return ""
+        total = df["Total_RS"].sum()
+        rows = ""
         for _, r in df.iterrows():
-            faixa = str(r['Faixa_Aging'])
-            pct   = float(r.get('Percentual', 0))
-            qtd   = int(r.get('Quantidade', 0))
-            tot   = float(r.get('Total_RS', 0))
-            if 'vencer' in faixa.lower():
-                bar_cls = 'bar-ok'
-            elif '1-30' in faixa or '31-60' in faixa:
-                bar_cls = 'bar-atencao'
+            faixa = str(r["Faixa_Aging"])
+            pct = float(r.get("Percentual", 0))
+            qtd = int(r.get("Quantidade", 0))
+            tot = float(r.get("Total_RS", 0))
+            if "vencer" in faixa.lower():
+                bar_cls = "bar-ok"
+            elif "1-30" in faixa or "31-60" in faixa:
+                bar_cls = "bar-atencao"
             else:
-                bar_cls = 'bar-critico'
+                bar_cls = "bar-critico"
             bar = f'<div class="bar-wrap"><div class="bar {bar_cls}" style="width:{min(pct,100):.1f}%"></div></div>'
-            rows += (f"<tr><td>{self._esc(faixa)}</td><td style='text-align:right'>{qtd}</td>"
-                     f"<td style='text-align:right'>R$ {tot:,.2f}</td>"
-                     f"<td style='text-align:right'>{pct:.1f}%</td>"
-                     f"<td style='width:180px'>{bar}</td></tr>")
+            rows += (
+                f"<tr><td>{self._esc(faixa)}</td><td style='text-align:right'>{qtd}</td>"
+                f"<td style='text-align:right'>R$ {tot:,.2f}</td>"
+                f"<td style='text-align:right'>{pct:.1f}%</td>"
+                f"<td style='width:180px'>{bar}</td></tr>"
+            )
         return f"""
   <section class="card" role="region" aria-label="Aging de recebíveis">
     <h2>📅 Aging de Recebíveis — Total: R$ {total:,.2f}</h2>
@@ -318,18 +326,25 @@ class GeradorHTML:
 """
 
     def _secao_dre(self, df: pd.DataFrame) -> str:
-        rows = ''
-        totais = {'(=) Receita Líquida', '(=) Lucro Bruto',
-                  '(=) Resultado Operacional (EBIT)', '(=) Resultado antes IR/CSLL', '(=) Lucro Líquido'}
+        rows = ""
+        totais = {
+            "(=) Receita Líquida",
+            "(=) Lucro Bruto",
+            "(=) Resultado Operacional (EBIT)",
+            "(=) Resultado antes IR/CSLL",
+            "(=) Lucro Líquido",
+        }
         for _, r in df.iterrows():
-            linha = str(r.get('Linha_DRE', ''))
-            valor = float(r.get('Valor_RS', 0))
-            av    = f"{float(r['AV_%']):.1f}%" if 'AV_%' in r and pd.notna(r.get('AV_%')) else ''
-            cls   = 'dre-total' if linha in totais else ('dre-sub' if linha.startswith('(-)') else '')
-            cor   = '#C0392B' if valor < 0 and linha in totais else ''
-            rows += (f"<tr class='{cls}'><td>{self._esc(linha)}</td>"
-                     f"<td style='text-align:right;color:{cor}'>R$ {valor:,.2f}</td>"
-                     f"<td style='text-align:right;color:#888'>{av}</td></tr>")
+            linha = str(r.get("Linha_DRE", ""))
+            valor = float(r.get("Valor_RS", 0))
+            av = f"{float(r['AV_%']):.1f}%" if "AV_%" in r and pd.notna(r.get("AV_%")) else ""
+            cls = "dre-total" if linha in totais else ("dre-sub" if linha.startswith("(-)") else "")
+            cor = "#C0392B" if valor < 0 and linha in totais else ""
+            rows += (
+                f"<tr class='{cls}'><td>{self._esc(linha)}</td>"
+                f"<td style='text-align:right;color:{cor}'>R$ {valor:,.2f}</td>"
+                f"<td style='text-align:right;color:#888'>{av}</td></tr>"
+            )
         return f"""
   <section class="card" role="region" aria-label="DRE — Demonstrativo de Resultado">
     <h2>📊 DRE — Demonstrativo de Resultado</h2>
@@ -346,20 +361,24 @@ class GeradorHTML:
 
     def _secao_pareto(self, df: pd.DataFrame) -> str:
         col_ent = df.columns[0]
-        max_val = df['Total_RS'].max() if len(df) else 1
-        rows = ''
+        max_val = df["Total_RS"].max() if len(df) else 1
+        rows = ""
         for _, r in df.head(15).iterrows():
-            pct_bar = min(float(r.get('Total_RS', 0)) / max_val * 100, 100)
-            classe  = str(r.get('Classe_Pareto', ''))
-            cor_cls = '#C9A227' if 'A' in classe else '#9BA8B5'
-            bar = f'<div class="bar-wrap"><div class="bar" style="width:{pct_bar:.1f}%;background:{cor_cls}"></div></div>'
-            rows += (f"<tr><td style='text-align:center'>{int(r.get('Ranking',0))}</td>"
-                     f"<td>{self._esc(r[col_ent])}</td>"
-                     f"<td style='text-align:right'>R$ {float(r.get('Total_RS',0)):,.2f}</td>"
-                     f"<td style='text-align:right'>{float(r.get('Percentual',0)):.1f}%</td>"
-                     f"<td style='text-align:right'>{float(r.get('Acumulado_%',0)):.1f}%</td>"
-                     f"<td><span style='color:{cor_cls};font-weight:bold'>{classe}</span></td>"
-                     f"<td style='width:120px'>{bar}</td></tr>")
+            pct_bar = min(float(r.get("Total_RS", 0)) / max_val * 100, 100)
+            classe = str(r.get("Classe_Pareto", ""))
+            cor_cls = "#C9A227" if "A" in classe else "#9BA8B5"
+            bar = (
+                f'<div class="bar-wrap"><div class="bar" style="width:{pct_bar:.1f}%;background:{cor_cls}"></div></div>'
+            )
+            rows += (
+                f"<tr><td style='text-align:center'>{int(r.get('Ranking',0))}</td>"
+                f"<td>{self._esc(r[col_ent])}</td>"
+                f"<td style='text-align:right'>R$ {float(r.get('Total_RS',0)):,.2f}</td>"
+                f"<td style='text-align:right'>{float(r.get('Percentual',0)):.1f}%</td>"
+                f"<td style='text-align:right'>{float(r.get('Acumulado_%',0)):.1f}%</td>"
+                f"<td><span style='color:{cor_cls};font-weight:bold'>{classe}</span></td>"
+                f"<td style='width:120px'>{bar}</td></tr>"
+            )
         return f"""
   <section class="card" role="region" aria-label="Análise Pareto — top {min(15,len(df))} entidades">
     <h2>🏆 Análise Pareto — Top {min(15,len(df))} de {len(df)}</h2>
@@ -377,18 +396,19 @@ class GeradorHTML:
 
     def _secao_fluxo(self, df_d, df_m, df_a) -> str:
         """Renderiza seção de fluxo de caixa por período (diário/mensal/anual)."""
+
         def _tabela(df, label_id):
             if df is None or len(df) == 0:
-                return f'<p style="color:#6B7280;font-size:13px">Nenhum dado disponível.</p>'
-            tot_rec  = df['Receita_RS'].sum()
-            tot_desp = df['Despesa_RS'].sum()
-            tot_res  = df['Resultado_RS'].sum()
-            rows = ''
+                return '<p style="color:#6B7280;font-size:13px">Nenhum dado disponível.</p>'
+            tot_rec = df["Receita_RS"].sum()
+            tot_desp = df["Despesa_RS"].sum()
+            tot_res = df["Resultado_RS"].sum()
+            rows = ""
             for _, r in df.iterrows():
-                res = float(r['Resultado_RS'])
-                cor = '#D1FAE5' if res >= 0 else '#FEE2E2'
-                pct = float(r['Resultado_Pct'])
-                pct_str = f'+{pct:.1f}%' if pct >= 0 else f'{pct:.1f}%'
+                res = float(r["Resultado_RS"])
+                cor = "#D1FAE5" if res >= 0 else "#FEE2E2"
+                pct = float(r["Resultado_Pct"])
+                pct_str = f"+{pct:.1f}%" if pct >= 0 else f"{pct:.1f}%"
                 rows += (
                     f"<tr style='background:{cor}'>"
                     f"<td style='font-weight:600'>{self._esc(str(r['Periodo']))}</td>"
@@ -400,7 +420,7 @@ class GeradorHTML:
                     f"R$ {res:,.2f}</td>"
                     f"<td style='text-align:center'>{pct_str}</td></tr>"
                 )
-            cor_tot = '#D1FAE5' if tot_res >= 0 else '#FEE2E2'
+            cor_tot = "#D1FAE5" if tot_res >= 0 else "#FEE2E2"
             rows += (
                 f"<tr style='background:{cor_tot};font-weight:bold;border-top:2px solid #1A3556'>"
                 f"<td>TOTAL</td>"
@@ -424,9 +444,9 @@ class GeradorHTML:
   </tr></thead><tbody>{rows}</tbody>
 </table></div>"""
 
-        tab_d = _tabela(df_d, 'diario')
-        tab_m = _tabela(df_m, 'mensal')
-        tab_a = _tabela(df_a, 'anual')
+        tab_d = _tabela(df_d, "diario")
+        tab_m = _tabela(df_m, "mensal")
+        tab_a = _tabela(df_a, "anual")
 
         return f"""
   <section class="card" role="region" aria-label="Fluxo de Receitas e Despesas por Período">

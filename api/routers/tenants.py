@@ -1,5 +1,6 @@
 """Endpoints de gestão de tenants (admin-only)."""
-from typing import Annotated, List
+
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -12,11 +13,11 @@ from .auth import hash_senha
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
-@router.get("/", response_model=List[TenantResponse])
+@router.get("/", response_model=list[TenantResponse])
 def listar_tenants(
     _admin: Annotated[Usuario, Depends(require_admin)],
     db: Session = Depends(get_db),
-) -> List[Tenant]:
+) -> list[Tenant]:
     return db.query(Tenant).filter(Tenant.ativo == True).all()  # noqa: E712
 
 

@@ -10,35 +10,39 @@ Execução:
     python motor_automatico.py --arquivo minha.xlsx  # processa arquivo específico
 """
 
-import os
-import sys
-import time
-import logging
-import smtplib
 import argparse
+import logging
+import os
+import smtplib
+import time
 import traceback
-from difflib                import get_close_matches
-from email.mime.text        import MIMEText
-from email.mime.multipart   import MIMEMultipart
-from datetime               import datetime, timezone
-from pathlib                import Path
+from datetime import datetime, timezone
+from difflib import get_close_matches
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pathlib import Path
 
-import yaml
 import pandas as pd
+import yaml
 
-from toolkit_financeiro import (
-    Leitor, Auditor, AnalistaFinanceiro, AnalistaComercial,
-    MontadorPlanilha, Verificador, Util, Status, validar_config,
-    Normalizador,
-)
-from relatorio_html import GeradorHTML
 from dashboard_visual import GeradorDashboard
+from relatorio_html import GeradorHTML
+from toolkit_financeiro import (
+    AnalistaComercial,
+    AnalistaFinanceiro,
+    Auditor,
+    Leitor,
+    MontadorPlanilha,
+    Normalizador,
+    Status,
+    validar_config,
+)
 
 # ── Logging ───────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%d/%m/%Y %H:%M:%S',
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%d/%m/%Y %H:%M:%S",
     handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
@@ -48,19 +52,20 @@ logger = logging.getLogger(__name__)
 # CARREGAMENTO DE CONFIGURAÇÃO
 # ══════════════════════════════════════════════════════════════════
 
-def carregar_config(caminho: str = 'config.yaml') -> dict:
+
+def carregar_config(caminho: str = "config.yaml") -> dict:
     if not os.path.exists(caminho):
         logger.warning("config.yaml não encontrado — usando configuração padrão")
         return {}
     try:
-        with open(caminho, encoding='utf-8') as f:
+        with open(caminho, encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
     except yaml.YAMLError as exc:
         raise SystemExit(f"config.yaml malformado: {exc}") from exc
     avisos = validar_config(cfg)
     for aviso in avisos:
         logger.warning("config.yaml: %s", aviso)
-    if cfg.get('validacao', {}).get('falhar_em_config_invalida', False) and avisos:
+    if cfg.get("validacao", {}).get("falhar_em_config_invalida", False) and avisos:
         raise SystemExit(f"Configuração inválida ({len(avisos)} erros). Corrija config.yaml.")
     return cfg
 
@@ -69,51 +74,54 @@ def carregar_config(caminho: str = 'config.yaml') -> dict:
 # PROCESSADOR PRINCIPAL
 # ══════════════════════════════════════════════════════════════════
 
+
 class ProcessadorArquivo:
     """Processa um arquivo financeiro e gera relatório HTML + Excel."""
 
-    EXTENSOES_SUPORTADAS = {'.xlsx', '.xls', '.xlsm', '.csv', '.tsv'}
+    EXTENSOES_SUPORTADAS = {".xlsx", ".xls", ".xlsm", ".csv", ".tsv"}
 
     def __init__(self, config: dict):
-        self.cfg      = config
-        self.cols     = config.get('colunas', {})
-        self.gerador  = GeradorHTML(config)
-        self.pasta_saida = Path(config.get('pastas', {}).get('saida', 'pasta_saida'))
+        self.cfg = config
+        self.cols = config.get("colunas", {})
+        self.gerador = GeradorHTML(config)
+        self.pasta_saida = Path(config.get("pastas", {}).get("saida", "pasta_saida"))
         self.pasta_saida.mkdir(parents=True, exist_ok=True)
 
         # Configurar logging para arquivo (guardamos referência para fechar depois)
-        log_path = config.get('pastas', {}).get('log', str(self.pasta_saida / 'log.txt'))
+        log_path = config.get("pastas", {}).get("log", str(self.pasta_saida / "log.txt"))
         # Evitar handlers duplicados se múltiplas instâncias forem criadas
-        if not any(isinstance(h, logging.FileHandler) and h.baseFilename == str(Path(log_path).resolve())
-                   for h in logger.handlers):
-            fh = logging.FileHandler(log_path, encoding='utf-8')
-            fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+        if not any(
+            isinstance(h, logging.FileHandler) and h.baseFilename == str(Path(log_path).resolve())
+            for h in logger.handlers
+        ):
+            fh = logging.FileHandler(log_path, encoding="utf-8")
+            fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
             logger.addHandler(fh)
             self._log_handler: logging.FileHandler = fh
         else:
             self._log_handler = None
 
     def __del__(self):
-        if getattr(self, '_log_handler', None):
+        if getattr(self, "_log_handler", None):
             try:
                 logger.removeHandler(self._log_handler)
                 self._log_handler.close()
-            except Exception:
+            except Exception:  # noqa: S110,BLE001
                 pass
 
     MAX_TAMANHO_BYTES = 50 * 1024 * 1024  # 50 MB
 
     # Magic bytes: assinatura binária esperada por tipo de extensão
     _MAGIC_BYTES: dict = {
-        '.xlsx': b'PK\x03\x04',   # ZIP (Open XML)
-        '.xlsm': b'PK\x03\x04',
-        '.xls':  b'\xd0\xcf\x11\xe0',  # OLE2 Compound Document
-        '.csv':  None,  # texto — sem assinatura binária obrigatória
-        '.tsv':  None,
+        ".xlsx": b"PK\x03\x04",  # ZIP (Open XML)
+        ".xlsm": b"PK\x03\x04",
+        ".xls": b"\xd0\xcf\x11\xe0",  # OLE2 Compound Document
+        ".csv": None,  # texto — sem assinatura binária obrigatória
+        ".tsv": None,
     }
 
     # Prefixos que iniciam fórmulas CSV injection em planilhas
-    _PREFIXOS_INJECAO = ('=', '+', '-', '@', '\t', '\r')
+    _PREFIXOS_INJECAO = ("=", "+", "-", "@", "\t", "\r")
 
     @staticmethod
     def _validar_caminho_arquivo(caminho: str, max_bytes: int = None) -> Path:
@@ -142,7 +150,7 @@ class ProcessadorArquivo:
         if assinatura is None:
             return  # CSV/TSV: sem validação binária
         try:
-            with open(caminho, 'rb') as fh:
+            with open(caminho, "rb") as fh:
                 cabecalho = fh.read(len(assinatura))
         except OSError:
             return  # será tratado no processar()
@@ -162,7 +170,7 @@ class ProcessadorArquivo:
                 return "'" + valor
             return valor
 
-        colunas_str = df.select_dtypes(include='object').columns
+        colunas_str = df.select_dtypes(include="object").columns
         df = df.copy()
         for col in colunas_str:
             df[col] = df[col].map(_sanitizar_celula)
@@ -177,83 +185,83 @@ class ProcessadorArquivo:
         self._validar_magic_bytes(p_validado)
         caminho_arquivo = str(p_validado)
         nome_base = Path(caminho_arquivo).stem
-        timestamp = datetime.now(tz=timezone.utc).strftime('%Y%m%d_%H%M%S')
-        prefixo   = f"{nome_base}_{timestamp}"
+        timestamp = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+        prefixo = f"{nome_base}_{timestamp}"
 
         logger.info("=" * 55)
         logger.info("Processando: %s", caminho_arquivo)
 
         resultado = {
-            'arquivo_origem':  caminho_arquivo,
-            'timestamp':       timestamp,
-            'html':            None,
-            'xlsx':            None,
-            'criticos':        0,
-            'total_problemas': 0,
-            'status':          'OK',
-            'erro':            None,
+            "arquivo_origem": caminho_arquivo,
+            "timestamp": timestamp,
+            "html": None,
+            "xlsx": None,
+            "criticos": 0,
+            "total_problemas": 0,
+            "status": "OK",
+            "erro": None,
         }
 
         try:
             # ── 1. Leitura ──────────────────────────────────────
             logger.info("[1/5] Lendo arquivo...")
-            leitura     = Leitor.ler_arquivo(caminho_arquivo)
-            dados       = leitura['dados']
-            diagnostico = leitura['diagnostico']
+            leitura = Leitor.ler_arquivo(caminho_arquivo)
+            dados = leitura["dados"]
+            diagnostico = leitura["diagnostico"]
             if not dados:
                 raise ValueError("Nenhuma aba encontrada no arquivo.")
-            nome_aba    = list(dados.keys())[0]
-            df          = dados[nome_aba].copy()
+            nome_aba = list(dados.keys())[0]
+            df = dados[nome_aba].copy()
             logger.info("      %d registros | %d colunas", len(df), len(df.columns))
 
             # Auto-detectar e normalizar ERP
             df = self._normalizar_colunas(df)
 
             # Colunas configuradas
-            col_val  = self.cols.get('valor',      'Valor')
-            col_cat  = self.cols.get('categoria',  'Categoria')
-            col_data = self.cols.get('data',       'Data')
-            col_venc = self.cols.get('vencimento', 'Vencimento')
-            col_chav = self.cols.get('chave',      'NF')
-            col_ent  = self.cols.get('entidade',   'Cliente')
-            col_obrig = self.cfg.get('colunas_obrigatorias', [col_val, col_data])
+            col_val = self.cols.get("valor", "Valor")
+            col_cat = self.cols.get("categoria", "Categoria")
+            col_data = self.cols.get("data", "Data")
+            col_venc = self.cols.get("vencimento", "Vencimento")
+            col_chav = self.cols.get("chave", "NF")
+            col_ent = self.cols.get("entidade", "Cliente")
+            col_obrig = self.cfg.get("colunas_obrigatorias", [col_val, col_data])
 
             # ── 1b. Conversão para planilha padrão ───────────────
             logger.info("[1b] Convertendo para formato padrão do sistema...")
             mapeamento_padrao = {
-                'NF':         col_chav,
-                'Data':       col_data,
-                'Vencimento': col_venc,
-                'Valor':      col_val,
-                'Categoria':  col_cat,
-                'Cliente':    col_ent,
+                "NF": col_chav,
+                "Data": col_data,
+                "Vencimento": col_venc,
+                "Valor": col_val,
+                "Categoria": col_cat,
+                "Cliente": col_ent,
             }
             df_padrao = Normalizador.para_padrao(df, mapeamento_padrao)
 
             # Validar formato padrão antes de continuar
             problemas_padrao = Normalizador.validar(df_padrao)
-            criticos_padrao  = [p for p in problemas_padrao if p['severidade'] == Status.CRITICA]
+            criticos_padrao = [p for p in problemas_padrao if p["severidade"] == Status.CRITICA]
             if criticos_padrao:
                 logger.warning("      %d problema(s) crítico(s) no formato padrão:", len(criticos_padrao))
                 for p in criticos_padrao:
-                    logger.warning("      [%s] %s: %s", p['severidade'], p['tipo'], p['descricao'])
+                    logger.warning("      [%s] %s: %s", p["severidade"], p["tipo"], p["descricao"])
 
             # Salvar planilha padronizada (sanitizada contra CSV injection)
             df_padrao = self._sanitizar_csv_injection(df_padrao)
             caminho_padrao = self.pasta_saida / f"padrao_{prefixo}.xlsx"
             df_padrao.to_excel(str(caminho_padrao), index=False)
-            resultado['padrao'] = str(caminho_padrao)
+            resultado["padrao"] = str(caminho_padrao)
             logger.info("      Planilha padrão: %s", caminho_padrao.name)
 
             # A partir daqui trabalha com o DataFrame padronizado
-            df      = df_padrao
-            col_val  = 'Valor'
-            col_cat  = 'Categoria'
-            col_data = 'Data'
-            col_venc = 'Vencimento'
-            col_chav = 'NF'
-            col_ent  = 'Cliente'
-            col_obrig = ['NF', 'Data', 'Valor']
+            df = df_padrao
+            col_val = "Valor"
+            col_cat = "Categoria"
+            col_data = "Data"
+            col_venc = "Vencimento"
+            col_chav = "NF"
+            col_ent = "Cliente"
+            col_obrig = ["NF", "Data", "Valor"]
 
             # ── 2. Auditoria ─────────────────────────────────────
             logger.info("[2/5] Auditoria...")
@@ -269,29 +277,26 @@ class ProcessadorArquivo:
                 inc = Auditor.detectar_inconsistencias_temporais(df, col_data, aba=nome_aba)
                 inconsistencias.extend(inc)
 
-            inconsistencias.extend(
-                Auditor.detectar_campos_vazios(df, col_obrig, nome_aba)
-            )
+            inconsistencias.extend(Auditor.detectar_campos_vazios(df, col_obrig, nome_aba))
 
-            df_auditoria  = Auditor.relatorio_auditoria(inconsistencias)
-            total_criticos = len(df_auditoria[df_auditoria['Severidade'] == Status.CRITICA]) if len(df_auditoria) else 0
-            resultado['criticos']        = total_criticos
-            resultado['total_problemas'] = len(df_auditoria)
+            df_auditoria = Auditor.relatorio_auditoria(inconsistencias)
+            total_criticos = len(df_auditoria[df_auditoria["Severidade"] == Status.CRITICA]) if len(df_auditoria) else 0
+            resultado["criticos"] = total_criticos
+            resultado["total_problemas"] = len(df_auditoria)
             logger.info("      %d problemas (%d críticos)", len(df_auditoria), total_criticos)
 
             # ── 3. Análises ──────────────────────────────────────
             logger.info("[3/5] Análises financeiras...")
-            df_aging  = self._calcular_aging(df, col_venc, col_val)
-            df_dre    = self._construir_dre(df, col_cat, col_val)
+            df_aging = self._calcular_aging(df, col_venc, col_val)
+            df_dre = self._construir_dre(df, col_cat, col_val)
             df_pareto = self._calcular_pareto(df, col_ent, col_val)
             df_ticket = self._calcular_ticket(df, col_val, col_ent)
 
             # Resumos por período (diário/mensal/anual)
-            df_fluxo_d = AnalistaFinanceiro.resumo_periodo(df, freq='D')
-            df_fluxo_m = AnalistaFinanceiro.resumo_periodo(df, freq='M')
-            df_fluxo_a = AnalistaFinanceiro.resumo_periodo(df, freq='A')
-            logger.info("      Fluxo: %d dias | %d meses | %d anos",
-                        len(df_fluxo_d), len(df_fluxo_m), len(df_fluxo_a))
+            df_fluxo_d = AnalistaFinanceiro.resumo_periodo(df, freq="D")
+            df_fluxo_m = AnalistaFinanceiro.resumo_periodo(df, freq="M")
+            df_fluxo_a = AnalistaFinanceiro.resumo_periodo(df, freq="A")
+            logger.info("      Fluxo: %d dias | %d meses | %d anos", len(df_fluxo_d), len(df_fluxo_m), len(df_fluxo_a))
 
             # ── 4. Relatório HTML ─────────────────────────────────
             logger.info("[4/5] Gerando HTML...")
@@ -309,8 +314,8 @@ class ProcessadorArquivo:
                 df_fluxo_anual=df_fluxo_a,
             )
             caminho_html = self.pasta_saida / f"relatorio_{prefixo}.html"
-            caminho_html.write_text(html, encoding='utf-8')
-            resultado['html'] = str(caminho_html)
+            caminho_html.write_text(html, encoding="utf-8")
+            resultado["html"] = str(caminho_html)
             logger.info("      HTML: %s", caminho_html)
 
             # Dashboard autônomo
@@ -326,8 +331,8 @@ class ProcessadorArquivo:
                 config=self.cfg,
             )
             caminho_dash = self.pasta_saida / f"dashboard_{prefixo}.html"
-            caminho_dash.write_text(dash_html, encoding='utf-8')
-            resultado['dashboard'] = str(caminho_dash)
+            caminho_dash.write_text(dash_html, encoding="utf-8")
+            resultado["dashboard"] = str(caminho_dash)
             logger.info("      Dashboard: %s", caminho_dash.name)
 
             # ── 5. Excel formatado ────────────────────────────────
@@ -336,65 +341,71 @@ class ProcessadorArquivo:
             montador = MontadorPlanilha()
             df_seguro = self._sanitizar_csv_injection(df)
 
-            montador.adicionar_aba('Dados', df_seguro, titulo=f'DADOS — {nome_aba}',
+            montador.adicionar_aba(
+                "Dados",
+                df_seguro,
+                titulo=f"DADOS — {nome_aba}",
                 cols_moeda=[col_val] if col_val in df.columns else [],
                 cols_data=[col_data] if col_data in df.columns else [],
-                cols_soma=[col_val]  if col_val in df.columns else [])
+                cols_soma=[col_val] if col_val in df.columns else [],
+            )
 
             if len(df_auditoria):
-                montador.adicionar_aba('Auditoria', df_auditoria,
-                    titulo='LOG DE AUDITORIA', col_status='Severidade',
-                    cols_moeda=['Impacto R$'] if 'Impacto R$' in df_auditoria.columns else [])
+                montador.adicionar_aba(
+                    "Auditoria",
+                    df_auditoria,
+                    titulo="LOG DE AUDITORIA",
+                    col_status="Severidade",
+                    cols_moeda=["Impacto R$"] if "Impacto R$" in df_auditoria.columns else [],
+                )
 
             if df_aging is not None and len(df_aging):
-                montador.adicionar_aba('Aging', df_aging, titulo='AGING',
-                    cols_moeda=['Total_RS'], adicionar_totais=False)
+                montador.adicionar_aba(
+                    "Aging", df_aging, titulo="AGING", cols_moeda=["Total_RS"], adicionar_totais=False
+                )
 
             if df_dre is not None and len(df_dre):
-                montador.adicionar_aba('DRE', df_dre, titulo='DRE',
-                    cols_moeda=['Valor_RS'], adicionar_totais=False)
+                montador.adicionar_aba("DRE", df_dre, titulo="DRE", cols_moeda=["Valor_RS"], adicionar_totais=False)
 
             if df_pareto is not None and len(df_pareto):
-                montador.adicionar_aba('Pareto', df_pareto, titulo='PARETO',
-                    cols_moeda=['Total_RS'])
+                montador.adicionar_aba("Pareto", df_pareto, titulo="PARETO", cols_moeda=["Total_RS"])
 
             metricas = self._montar_metricas(df, df_auditoria, col_val, total_criticos)
             montador.adicionar_resumo_executivo(metricas)
             montador.salvar(str(caminho_xlsx))
-            resultado['xlsx'] = str(caminho_xlsx)
+            resultado["xlsx"] = str(caminho_xlsx)
             logger.info("      Excel: %s", caminho_xlsx)
 
             # ── Relatório de ações corretivas ─────────────────────
             if total_criticos > 0 or len(df_auditoria) > 0:
-                resultado['status'] = 'ALERTA' if total_criticos > 0 else 'AVISO'
+                resultado["status"] = "ALERTA" if total_criticos > 0 else "AVISO"
                 caminho_acoes = self.pasta_saida / f"acoes_{prefixo}.html"
                 html_acoes = self._gerar_relatorio_acoes(resultado, df_auditoria)
-                caminho_acoes.write_text(html_acoes, encoding='utf-8')
-                resultado['acoes'] = str(caminho_acoes)
+                caminho_acoes.write_text(html_acoes, encoding="utf-8")
+                resultado["acoes"] = str(caminho_acoes)
                 logger.info("      Ações: %s", caminho_acoes.name)
 
-            logger.info("CONCLUÍDO — criticos=%d | html=%s",
-                        total_criticos, caminho_html.name)
+            logger.info("CONCLUÍDO — criticos=%d | html=%s", total_criticos, caminho_html.name)
 
         except (FileNotFoundError, PermissionError) as exc:
-            resultado['status'] = 'ERRO'
-            resultado['erro']   = str(exc)
+            resultado["status"] = "ERRO"
+            resultado["erro"] = str(exc)
             logger.error("Arquivo inacessível %s: %s", caminho_arquivo, exc)
         except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
-            resultado['status'] = 'ERRO'
-            resultado['erro']   = str(exc)
+            resultado["status"] = "ERRO"
+            resultado["erro"] = str(exc)
             logger.error("Dados inválidos em %s: %s", caminho_arquivo, exc)
         except (ValueError, KeyError) as exc:
-            resultado['status'] = 'ERRO'
-            resultado['erro']   = str(exc)
+            resultado["status"] = "ERRO"
+            resultado["erro"] = str(exc)
             logger.error("Erro de dados em %s: %s", caminho_arquivo, exc)
         except RuntimeError as exc:
-            resultado['status'] = 'ERRO'
-            resultado['erro']   = str(exc)
+            resultado["status"] = "ERRO"
+            resultado["erro"] = str(exc)
             logger.error("Erro de processamento em %s: %s", caminho_arquivo, exc)
         except Exception as exc:
-            resultado['status'] = 'ERRO'
-            resultado['erro']   = str(exc)
+            resultado["status"] = "ERRO"
+            resultado["erro"] = str(exc)
             logger.error("Erro inesperado em %s: %s", caminho_arquivo, exc)
             logger.debug(traceback.format_exc())
 
@@ -405,19 +416,18 @@ class ProcessadorArquivo:
     def _normalizar_colunas(self, df: pd.DataFrame) -> pd.DataFrame:
         """Detecta ERPs por correspondência exata ou fuzzy (difflib) nas colunas."""
         from base_conhecimento import MAPAS_ERP
+
         cols_upper = list(df.columns.str.upper())
         sinais = {
-            'TOTVS':   ['E1_NUM', 'E1_CLIENTE', 'E1_VALOR'],
-            'OMIE':    ['NUMERO_DOCUMENTO', 'NOME_CLIENTE', 'VALOR_DOCUMENTO'],
-            'DOMINIO': ['HISTÓRICO', 'SAL. BASE'],
-            'QUESTOR': ['DT_LANCTO', 'VL_LANCTO'],
-            'SAP_B1':  ['DOCNUM', 'CARDCODE', 'DOCTOTAL'],
+            "TOTVS": ["E1_NUM", "E1_CLIENTE", "E1_VALOR"],
+            "OMIE": ["NUMERO_DOCUMENTO", "NOME_CLIENTE", "VALOR_DOCUMENTO"],
+            "DOMINIO": ["HISTÓRICO", "SAL. BASE"],
+            "QUESTOR": ["DT_LANCTO", "VL_LANCTO"],
+            "SAP_B1": ["DOCNUM", "CARDCODE", "DOCTOTAL"],
         }
         for erp, campos in sinais.items():
             correspondencias = sum(
-                1 for campo in campos
-                if campo in cols_upper
-                or get_close_matches(campo, cols_upper, n=1, cutoff=0.85)
+                1 for campo in campos if campo in cols_upper or get_close_matches(campo, cols_upper, n=1, cutoff=0.85)
             )
             if correspondencias >= 2:
                 logger.info("      ERP detectado (fuzzy): %s", erp)
@@ -427,26 +437,34 @@ class ProcessadorArquivo:
 
     def _coletar_dups(self, df, col_chav, aba, lista):
         for _, row in Auditor.detectar_duplicatas(df, [col_chav], aba).iterrows():
-            lista.append({
-                'aba': aba, 'linha': int(row.get('_linha_excel', 0)),
-                'coluna': col_chav, 'tipo': 'DUPLICATA',
-                'severidade': Status.CRITICA,
-                'valor': str(row.get(col_chav, '')),
-                'descricao': f"Duplicata em '{col_chav}'",
-                'impacto_rs': 0,
-            })
+            lista.append(
+                {
+                    "aba": aba,
+                    "linha": int(row.get("_linha_excel", 0)),
+                    "coluna": col_chav,
+                    "tipo": "DUPLICATA",
+                    "severidade": Status.CRITICA,
+                    "valor": str(row.get(col_chav, "")),
+                    "descricao": f"Duplicata em '{col_chav}'",
+                    "impacto_rs": 0,
+                }
+            )
 
     def _coletar_outliers(self, df, col_val, aba, lista):
-        n = self.cfg.get('auditoria', {}).get('outlier_desvios', 3.0)
+        n = self.cfg.get("auditoria", {}).get("outlier_desvios", 3.0)
         for _, row in Auditor.detectar_outliers(df, col_val, n_desvios=n, aba=aba).iterrows():
-            lista.append({
-                'aba': aba, 'linha': int(row.get('_linha_excel', 0)),
-                'coluna': col_val, 'tipo': 'OUTLIER',
-                'severidade': Status.MEDIA,
-                'valor': str(row.get(col_val, '')),
-                'descricao': f"Outlier ±{row.get('_desvio_padrao','?')}σ",
-                'impacto_rs': 0,
-            })
+            lista.append(
+                {
+                    "aba": aba,
+                    "linha": int(row.get("_linha_excel", 0)),
+                    "coluna": col_val,
+                    "tipo": "OUTLIER",
+                    "severidade": Status.MEDIA,
+                    "valor": str(row.get(col_val, "")),
+                    "descricao": f"Outlier ±{row.get('_desvio_padrao','?')}σ",
+                    "impacto_rs": 0,
+                }
+            )
 
     def _calcular_aging(self, df, col_venc, col_val):
         if col_venc in df.columns and col_val in df.columns:
@@ -484,57 +502,58 @@ class ProcessadorArquivo:
     def _montar_metricas(self, df, df_audit, col_val, criticos) -> dict:
         metricas = {}
         if col_val in df.columns:
-            total = pd.to_numeric(df[col_val], errors='coerce').sum()
-            media = pd.to_numeric(df[col_val], errors='coerce').mean()
-            metricas['Total Geral']  = {'valor': total, 'tipo': 'moeda', 'status': Status.OK}
-            metricas['Ticket Médio'] = {'valor': media, 'tipo': 'moeda', 'status': Status.OK}
-        metricas['Total de Registros']  = {'valor': len(df),  'tipo': 'numero', 'status': Status.OK}
-        metricas['Problemas Críticos']  = {
-            'valor': criticos, 'tipo': 'numero',
-            'status': Status.OK if criticos == 0 else Status.DIVERGENTE,
-            'obs': f"{len(df_audit)} alertas no total",
+            total = pd.to_numeric(df[col_val], errors="coerce").sum()
+            media = pd.to_numeric(df[col_val], errors="coerce").mean()
+            metricas["Total Geral"] = {"valor": total, "tipo": "moeda", "status": Status.OK}
+            metricas["Ticket Médio"] = {"valor": media, "tipo": "moeda", "status": Status.OK}
+        metricas["Total de Registros"] = {"valor": len(df), "tipo": "numero", "status": Status.OK}
+        metricas["Problemas Críticos"] = {
+            "valor": criticos,
+            "tipo": "numero",
+            "status": Status.OK if criticos == 0 else Status.DIVERGENTE,
+            "obs": f"{len(df_audit)} alertas no total",
         }
         return metricas
 
     # ── Mapa de soluções por tipo de problema ─────────────────────
 
     _SOLUCOES = {
-        'DUPLICATA': (
+        "DUPLICATA": (
             "Remover registros duplicados",
             "Verifique qual linha deve ser mantida e exclua as demais. "
             "No Excel: Dados → Remover Duplicatas. Confirme antes qual versão "
             "do registro é a correta (ex.: a mais recente ou a de maior valor).",
         ),
-        'OUTLIER': (
+        "OUTLIER": (
             "Verificar valor atípico",
             "O valor está muito acima ou abaixo da média histórica. "
             "Confira se houve erro de digitação (ex.: 1.000 digitado como 100.000), "
             "separador decimal errado ou lançamento em duplicidade com valor somado.",
         ),
-        'CAMPO_VAZIO': (
+        "CAMPO_VAZIO": (
             "Preencher campo obrigatório",
             "Este campo é obrigatório e não pode ficar em branco. "
             "Localize a linha indicada, preencha com o valor correto e reimporte o arquivo. "
             "Sem esta informação o registro não será processado corretamente.",
         ),
-        'NUMERO_COMO_TEXTO': (
+        "NUMERO_COMO_TEXTO": (
             "Converter coluna para formato numérico",
             "A coluna contém números armazenados como texto (geralmente por importação de ERP). "
             "No Excel: selecione a coluna → clique no aviso amarelo → 'Converter em Número'. "
             "Ou use a fórmula =VALOR(A1) em uma coluna auxiliar.",
         ),
-        'DATAS_FORMATO_MISTO': (
+        "DATAS_FORMATO_MISTO": (
             "Padronizar formato de datas",
             "A coluna mistura formatos de data (ex.: DD/MM/AAAA e AAAA-MM-DD). "
             "Padronize todas as datas para DD/MM/AAAA antes de reimportar. "
             "No Excel: selecione a coluna → Formatar Células → Data → escolha o padrão.",
         ),
-        'COLUNA_VAZIA': (
+        "COLUNA_VAZIA": (
             "Verificar coluna completamente vazia",
             "Esta coluna não possui nenhum dado. Verifique se o nome da coluna está "
             "correto no arquivo de origem ou se os dados foram exportados corretamente do sistema.",
         ),
-        'INCONSISTENCIA_TEMPORAL': (
+        "INCONSISTENCIA_TEMPORAL": (
             "Corrigir inconsistência de datas",
             "Há datas fora de ordem ou incoerentes (ex.: vencimento anterior à emissão). "
             "Revise os campos de Data e Vencimento nas linhas indicadas.",
@@ -542,40 +561,49 @@ class ProcessadorArquivo:
     }
 
     _COR_SEV = {
-        'CRÍTICA': ('#FEE2E2', '#991B1B', '🔴'),
-        'ALTA':    ('#FFF0E6', '#7C2D12', '🟠'),
-        'MÉDIA':   ('#FEF3C7', '#92400E', '🟡'),
-        'BAIXA':   ('#D1FAE5', '#065F46', '🟢'),
+        "CRÍTICA": ("#FEE2E2", "#991B1B", "🔴"),
+        "ALTA": ("#FFF0E6", "#7C2D12", "🟠"),
+        "MÉDIA": ("#FEF3C7", "#92400E", "🟡"),
+        "BAIXA": ("#D1FAE5", "#065F46", "🟢"),
     }
 
     def _gerar_relatorio_acoes(self, resultado: dict, df_audit: pd.DataFrame) -> str:
         """Gera relatório HTML com problemas encontrados e sugestões de correção."""
         from datetime import datetime as _dt
-        agora   = _dt.now().strftime('%d/%m/%Y %H:%M')
-        arquivo = Path(resultado['arquivo_origem']).name
-        criticos = resultado['criticos']
-        total    = resultado['total_problemas']
 
-        status_cor = '#C0392B' if criticos > 0 else '#E8A020'
-        status_txt = f"{criticos} problema(s) CRÍTICO(S) — ação imediata necessária" if criticos > 0 else f"{total} aviso(s) — revisar antes de prosseguir"
+        agora = _dt.now().strftime("%d/%m/%Y %H:%M")
+        arquivo = Path(resultado["arquivo_origem"]).name
+        criticos = resultado["criticos"]
+        total = resultado["total_problemas"]
 
-        itens_html = ''
+        status_cor = "#C0392B" if criticos > 0 else "#E8A020"
+        status_txt = (
+            f"{criticos} problema(s) CRÍTICO(S) — ação imediata necessária"
+            if criticos > 0
+            else f"{total} aviso(s) — revisar antes de prosseguir"
+        )
+
+        itens_html = ""
         for _, r in df_audit.iterrows():
-            sev   = str(r.get('Severidade', 'MÉDIA'))
-            tipo  = str(r.get('Tipo', ''))
-            col   = str(r.get('Coluna', ''))
-            desc  = str(r.get('Descrição', ''))
-            linha = r.get('Linha', '')
+            sev = str(r.get("Severidade", "MÉDIA"))
+            tipo = str(r.get("Tipo", ""))
+            col = str(r.get("Coluna", ""))
+            desc = str(r.get("Descrição", ""))
+            linha = r.get("Linha", "")
             if isinstance(linha, list):
-                linha = ', '.join(str(x) for x in linha[:5])
+                linha = ", ".join(str(x) for x in linha[:5])
 
-            fundo, texto, emoji = self._COR_SEV.get(sev, ('#FEF3C7', '#92400E', '🟡'))
-            titulo_sol, detalhe_sol = self._SOLUCOES.get(tipo, (
-                "Revisar manualmente",
-                "Verifique o campo indicado e corrija conforme as regras do negócio.",
-            ))
+            fundo, texto, emoji = self._COR_SEV.get(sev, ("#FEF3C7", "#92400E", "🟡"))
+            titulo_sol, detalhe_sol = self._SOLUCOES.get(
+                tipo,
+                (
+                    "Revisar manualmente",
+                    "Verifique o campo indicado e corrija conforme as regras do negócio.",
+                ),
+            )
 
             import html as _html
+
             itens_html += f"""
   <div style="border:1px solid #DDE6F0;border-radius:10px;margin-bottom:16px;overflow:hidden">
     <div style="background:{fundo};padding:14px 18px;display:flex;align-items:center;gap:10px">
@@ -642,19 +670,19 @@ class ProcessadorArquivo:
 </body></html>"""
 
     def _enviar_email(self, resultado: dict, df_audit: pd.DataFrame):
-        cfg_email = self.cfg.get('email', {})
-        if not cfg_email.get('ativo', False):
+        cfg_email = self.cfg.get("email", {})
+        if not cfg_email.get("ativo", False):
             return
         try:
-            smtp   = cfg_email['smtp_servidor']
-            porta  = cfg_email.get('smtp_porta', 587)
-            rem    = cfg_email['remetente']
-            senha = os.environ.get('EMAIL_SENHA', '')
+            smtp = cfg_email["smtp_servidor"]
+            porta = cfg_email.get("smtp_porta", 587)
+            rem = cfg_email["remetente"]
+            senha = os.environ.get("EMAIL_SENHA", "")
             if not senha:
-                senha = cfg_email.get('senha', '')
+                senha = cfg_email.get("senha", "")
                 if senha:
                     logger.warning("EMAIL_SENHA lida do config.yaml — prefira a variável de ambiente EMAIL_SENHA")
-            dests = cfg_email.get('destinatarios', [])
+            dests = cfg_email.get("destinatarios", [])
             if not dests:
                 logger.warning("Email ativo mas lista de destinatários vazia.")
                 return
@@ -664,8 +692,8 @@ class ProcessadorArquivo:
             assunto = f"{cfg_email.get('assunto_prefixo','[Toolkit]')} {resultado['total_problemas']} alertas — {Path(resultado['arquivo_origem']).name}"
 
             # Corpo do e-mail
-            criticos_html = ''
-            for _, r in df_audit[df_audit['Severidade'] == Status.CRITICA].head(10).iterrows():
+            criticos_html = ""
+            for _, r in df_audit[df_audit["Severidade"] == Status.CRITICA].head(10).iterrows():
                 criticos_html += f"<li><b>{r.get('Tipo','')}</b> — {r.get('Descrição','')}</li>"
 
             corpo = f"""
@@ -680,11 +708,11 @@ class ProcessadorArquivo:
 <hr>
 <p>Abra o relatório HTML para detalhes completos.</p>
 """
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = assunto
-            msg['From']    = rem
-            msg['To']      = ', '.join(dests)
-            msg.attach(MIMEText(corpo, 'html'))
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = assunto
+            msg["From"] = rem
+            msg["To"] = ", ".join(dests)
+            msg.attach(MIMEText(corpo, "html"))
 
             max_tentativas = 3
             for tentativa in range(1, max_tentativas + 1):
@@ -698,19 +726,22 @@ class ProcessadorArquivo:
                 except smtplib.SMTPAuthenticationError as e:
                     logger.error("Falha de autenticação SMTP: %s", e)
                     return
-                except (smtplib.SMTPConnectError, smtplib.SMTPException,
-                        OSError, ConnectionRefusedError) as e:
+                except (smtplib.SMTPConnectError, smtplib.SMTPException, OSError, ConnectionRefusedError) as e:
                     if tentativa < max_tentativas:
-                        espera = 2 ** tentativa
+                        espera = 2**tentativa
                         logger.warning(
                             "E-mail: tentativa %d/%d falhou (%s). Aguardando %ds...",
-                            tentativa, max_tentativas, e, espera,
+                            tentativa,
+                            max_tentativas,
+                            e,
+                            espera,
                         )
                         time.sleep(espera)
                     else:
                         logger.error(
                             "Falha ao enviar e-mail após %d tentativas: %s",
-                            max_tentativas, e,
+                            max_tentativas,
+                            e,
                         )
         except KeyError as e:
             logger.error("Configuração de e-mail incompleta: %s", e)
@@ -720,12 +751,13 @@ class ProcessadorArquivo:
 # OBSERVADOR DE PASTA (modo contínuo)
 # ══════════════════════════════════════════════════════════════════
 
+
 class ObservadorPasta:
     """Monitora a pasta de entrada e processa arquivos novos."""
 
     def __init__(self, processador: ProcessadorArquivo, pasta: str):
         self.processador = processador
-        self.pasta       = Path(pasta)
+        self.pasta = Path(pasta)
         self.pasta.mkdir(parents=True, exist_ok=True)
         self._vistos: set = set()
 
@@ -745,10 +777,10 @@ class ObservadorPasta:
                     # Para reprocessar, renomeie ou reimporte o arquivo.
                     self._vistos.add(arquivo.name)
                     resultado = self.processador.processar(str(arquivo))
-                    if resultado.get('status') == 'ERRO':
-                        err = resultado.get('erro', '')
+                    if resultado.get("status") == "ERRO":
+                        err = resultado.get("erro", "")
                         # Erro de I/O irrecuperável: remove dos vistos para retry.
-                        if any(kw in err for kw in ('PermissionError', 'OSError', 'IOError')):
+                        if any(kw in err for kw in ("PermissionError", "OSError", "IOError")):
                             self._vistos.discard(arquivo.name)
                             logger.warning("Arquivo %s será reprocessado na próxima varredura.", arquivo.name)
 
@@ -769,30 +801,31 @@ class ObservadorPasta:
 # ENTRY POINT
 # ══════════════════════════════════════════════════════════════════
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Motor Autônomo — Toolkit Financeiro')
-    parser.add_argument('--config',   default='config.yaml',   help='Caminho do config.yaml')
-    parser.add_argument('--once',     action='store_true',      help='Processar uma vez e sair')
-    parser.add_argument('--arquivo',  default=None,             help='Processar arquivo específico')
-    parser.add_argument('--intervalo',type=int, default=5,      help='Intervalo de monitoramento (segundos)')
+    parser = argparse.ArgumentParser(description="Motor Autônomo — Toolkit Financeiro")
+    parser.add_argument("--config", default="config.yaml", help="Caminho do config.yaml")
+    parser.add_argument("--once", action="store_true", help="Processar uma vez e sair")
+    parser.add_argument("--arquivo", default=None, help="Processar arquivo específico")
+    parser.add_argument("--intervalo", type=int, default=5, help="Intervalo de monitoramento (segundos)")
     args = parser.parse_args()
 
-    cfg          = carregar_config(args.config)
+    cfg = carregar_config(args.config)
 
     logger.info("=" * 55)
     logger.info("Toolkit Financeiro — Motor Autônomo")
     logger.info("Powered by Luan Guilherme Lourenço")
     logger.info("=" * 55)
 
-    processador  = ProcessadorArquivo(cfg)
-    pasta_entrada = cfg.get('pastas', {}).get('entrada', 'pasta_entrada')
+    processador = ProcessadorArquivo(cfg)
+    pasta_entrada = cfg.get("pastas", {}).get("entrada", "pasta_entrada")
 
     if args.arquivo:
         # Modo: arquivo específico
         resultado = processador.processar(args.arquivo)
-        logger.info("HTML:  %s", resultado['html'])
-        logger.info("Excel: %s", resultado['xlsx'])
-        logger.info("Críticos: %d | Total alertas: %d", resultado['criticos'], resultado['total_problemas'])
+        logger.info("HTML:  %s", resultado["html"])
+        logger.info("Excel: %s", resultado["xlsx"])
+        logger.info("Críticos: %d | Total alertas: %d", resultado["criticos"], resultado["total_problemas"])
 
     elif args.once:
         # Modo: varrer pasta uma vez
@@ -805,5 +838,5 @@ def main():
         obs.monitorar(intervalo=args.intervalo)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -8,13 +8,12 @@ Uso:
     df_proj = ForecastEngine.projetar(df_processado, dias=[30, 60, 90])
     alertas = ForecastEngine.alertas(df_proj)
 """
+
 from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
-from typing import List
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ class ForecastEngine:
         col_data: str = "Data",
         col_valor: str = "Valor",
         col_tipo: str = "Tipo",
-        dias: List[int] = None,
+        dias: list[int] = None,
         meses_historico: int = 3,
     ) -> pd.DataFrame:
         """
@@ -69,16 +68,18 @@ class ForecastEngine:
             rec = round(rec_dia * d, 2) if d <= max(dias) else 0.0
             desp = round(desp_dia * d, 2)
             saldo = round(rec - desp, 2)
-            saldo_acumulado += (rec_dia - desp_dia)
+            saldo_acumulado += rec_dia - desp_dia
             if d in dias:
-                linhas.append({
-                    "Horizonte_Dias": d,
-                    "Data_Proj": data_proj.strftime("%d/%m/%Y"),
-                    "Receita_Proj": round(rec_dia * d, 2),
-                    "Despesa_Proj": round(desp_dia * d, 2),
-                    "Saldo_Proj": round(saldo_acumulado, 2),
-                    "Alerta": "⚠️ SALDO NEGATIVO" if saldo_acumulado < 0 else "✅ OK",
-                })
+                linhas.append(
+                    {
+                        "Horizonte_Dias": d,
+                        "Data_Proj": data_proj.strftime("%d/%m/%Y"),
+                        "Receita_Proj": round(rec_dia * d, 2),
+                        "Despesa_Proj": round(desp_dia * d, 2),
+                        "Saldo_Proj": round(saldo_acumulado, 2),
+                        "Alerta": "⚠️ SALDO NEGATIVO" if saldo_acumulado < 0 else "✅ OK",
+                    }
+                )
 
         return pd.DataFrame(linhas)
 
@@ -119,16 +120,18 @@ class ForecastEngine:
         linhas = []
         for d in range(1, dias + 1):
             saldo += rec_dia - desp_dia
-            linhas.append({
-                "Data_Proj": (hoje + timedelta(days=d)).strftime("%d/%m/%Y"),
-                "Receita_Proj": round(rec_dia, 2),
-                "Despesa_Proj": round(desp_dia, 2),
-                "Saldo_Proj": round(saldo, 2),
-            })
+            linhas.append(
+                {
+                    "Data_Proj": (hoje + timedelta(days=d)).strftime("%d/%m/%Y"),
+                    "Receita_Proj": round(rec_dia, 2),
+                    "Despesa_Proj": round(desp_dia, 2),
+                    "Saldo_Proj": round(saldo, 2),
+                }
+            )
         return pd.DataFrame(linhas)
 
     @staticmethod
-    def alertas(df_proj: pd.DataFrame) -> List[str]:
+    def alertas(df_proj: pd.DataFrame) -> list[str]:
         """Retorna lista de textos de alerta com base na projeção."""
         alertas = []
         negativos = df_proj[df_proj.get("Saldo_Proj", pd.Series(dtype=float)) < 0]

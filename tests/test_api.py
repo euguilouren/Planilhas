@@ -1,5 +1,5 @@
 """Testes para a API REST — auth, tenants e jobs."""
-import json
+
 from datetime import timedelta
 
 import pytest
@@ -8,10 +8,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from api.db import Base, Tenant, Usuario, get_db
 from api.main import app
-from api.db import Base, get_db, Tenant, Usuario
-from api.routers.auth import hash_senha, _criar_token, _payload_usuario
-
+from api.routers.auth import _criar_token, _payload_usuario, hash_senha
 
 # ── Banco SQLite em memória compartilhado (StaticPool) ────────────────
 
@@ -92,6 +91,7 @@ def _token_para(usuario: Usuario) -> str:
 
 # ── /health ───────────────────────────────────────────────────────────
 
+
 class TestHealth:
     def test_health_retorna_ok(self, client):
         resp = client.get("/health")
@@ -105,12 +105,16 @@ class TestHealth:
 
 # ── /auth/login ───────────────────────────────────────────────────────
 
+
 class TestLogin:
     def test_login_credenciais_validas(self, client, tenant_e_admin):
-        resp = client.post("/auth/login", json={
-            "email": "admin@empresa.com",
-            "senha": "senha123!",
-        })
+        resp = client.post(
+            "/auth/login",
+            json={
+                "email": "admin@empresa.com",
+                "senha": "senha123!",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "access_token" in data
@@ -118,24 +122,33 @@ class TestLogin:
         assert data["token_type"] == "bearer"
 
     def test_login_senha_errada_retorna_401(self, client, tenant_e_admin):
-        resp = client.post("/auth/login", json={
-            "email": "admin@empresa.com",
-            "senha": "senha_errada",
-        })
+        resp = client.post(
+            "/auth/login",
+            json={
+                "email": "admin@empresa.com",
+                "senha": "senha_errada",
+            },
+        )
         assert resp.status_code == 401
 
     def test_login_email_inexistente_retorna_401(self, client):
-        resp = client.post("/auth/login", json={
-            "email": "ninguem@nowhere.com",
-            "senha": "qualquer",
-        })
+        resp = client.post(
+            "/auth/login",
+            json={
+                "email": "ninguem@nowhere.com",
+                "senha": "qualquer",
+            },
+        )
         assert resp.status_code == 401
 
     def test_token_permite_acessar_endpoint_protegido(self, client, tenant_e_admin):
-        login = client.post("/auth/login", json={
-            "email": "admin@empresa.com",
-            "senha": "senha123!",
-        })
+        login = client.post(
+            "/auth/login",
+            json={
+                "email": "admin@empresa.com",
+                "senha": "senha123!",
+            },
+        )
         token = login.json()["access_token"]
         resp = client.get("/tenants/", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
@@ -146,6 +159,7 @@ class TestLogin:
 
 
 # ── /tenants ──────────────────────────────────────────────────────────
+
 
 class TestTenants:
     def test_admin_lista_tenants(self, client, tenant_e_admin):
@@ -162,17 +176,22 @@ class TestTenants:
 
     def test_admin_cria_tenant(self, client, tenant_e_admin):
         token = _token_para(tenant_e_admin["admin"])
-        resp = client.post("/tenants/", json={"nome": "Novo Cliente", "slug": "novo-cliente"},
-                           headers={"Authorization": f"Bearer {token}"})
+        resp = client.post(
+            "/tenants/",
+            json={"nome": "Novo Cliente", "slug": "novo-cliente"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert resp.status_code == 201
         assert resp.json()["slug"] == "novo-cliente"
 
     def test_slug_duplicado_retorna_409(self, client, tenant_e_admin):
         token = _token_para(tenant_e_admin["admin"])
-        client.post("/tenants/", json={"nome": "Empresa X", "slug": "unico-slug"},
-                    headers={"Authorization": f"Bearer {token}"})
-        resp = client.post("/tenants/", json={"nome": "Empresa Y", "slug": "unico-slug"},
-                           headers={"Authorization": f"Bearer {token}"})
+        client.post(
+            "/tenants/", json={"nome": "Empresa X", "slug": "unico-slug"}, headers={"Authorization": f"Bearer {token}"}
+        )
+        resp = client.post(
+            "/tenants/", json={"nome": "Empresa Y", "slug": "unico-slug"}, headers={"Authorization": f"Bearer {token}"}
+        )
         assert resp.status_code == 409
 
     def test_admin_cria_usuario_no_tenant(self, client, tenant_e_admin):
@@ -199,6 +218,7 @@ class TestTenants:
 
 # ── /jobs ─────────────────────────────────────────────────────────────
 
+
 class TestJobs:
     def test_listar_jobs_vazio_inicialmente(self, client, tenant_e_admin):
         token = _token_para(tenant_e_admin["analyst"])
@@ -217,6 +237,7 @@ class TestJobs:
 
     def test_upload_arquivo_muito_grande_retorna_413(self, client, tenant_e_admin, monkeypatch):
         import api.routers.uploads as mod
+
         monkeypatch.setattr(mod, "_MAX_BYTES", 10)
         token = _token_para(tenant_e_admin["analyst"])
         resp = client.post(
@@ -234,6 +255,7 @@ class TestJobs:
 
 # ── Isolamento multi-tenant ───────────────────────────────────────────
 
+
 class TestMultiTenancy:
     def test_tenants_nao_veeem_jobs_uns_dos_outros(self, client, db):
         """Dois tenants distintos não podem ver os jobs um do outro."""
@@ -247,10 +269,13 @@ class TestMultiTenancy:
         db.add_all([u1, u2])
         db.commit()
 
-        from api.db import Job as JobModel
         from datetime import datetime, timezone
-        job_t1 = JobModel(tenant_id=t1.id, arquivo_nome="t1.xlsx", status="concluido",
-                          concluido_em=datetime.now(tz=timezone.utc))
+
+        from api.db import Job as JobModel
+
+        job_t1 = JobModel(
+            tenant_id=t1.id, arquivo_nome="t1.xlsx", status="concluido", concluido_em=datetime.now(tz=timezone.utc)
+        )
         db.add(job_t1)
         db.commit()
 

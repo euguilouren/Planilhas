@@ -1,4 +1,5 @@
 """Endpoints de autenticação JWT."""
+
 import os
 import time
 from datetime import timedelta
@@ -46,9 +47,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
 def refresh(body: dict, db: Session = Depends(get_db)) -> TokenResponse:
     token = body.get("refresh_token", "")
     token_data = _decodificar_token(token)
-    usuario = db.query(Usuario).filter(
-        Usuario.email == token_data.sub, Usuario.ativo == True  # noqa: E712
-    ).first()
+    usuario = db.query(Usuario).filter(Usuario.email == token_data.sub, Usuario.ativo == True).first()  # noqa: E712
     if not usuario:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não encontrado")
     payload = _payload_usuario(usuario)

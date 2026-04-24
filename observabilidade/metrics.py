@@ -11,6 +11,7 @@ Uso com FastAPI:
 Uso standalone (inicia servidor de métricas na porta 9090):
     python -m observabilidade.metrics
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,8 @@ logger = logging.getLogger(__name__)
 
 def _tentar_importar_prometheus():
     try:
-        from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+        from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+
         return Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
     except ImportError:
         return None
@@ -109,10 +111,13 @@ def endpoint_metricas():
 if __name__ == "__main__":
     try:
         from prometheus_client import start_http_server
+
         porta = 9090
         start_http_server(porta)
         print(f"Servidor de métricas iniciado na porta {porta}")
-        import signal, sys
+        import signal
+        import sys
+
         signal.signal(signal.SIGINT, lambda s, f: sys.exit(0))
         while True:
             time.sleep(1)

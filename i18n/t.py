@@ -7,6 +7,7 @@ Uso:
     label = t("kpi.receita_total", lang="en_US")  # → "Total Revenue"
     label = t("status.problemas", n=5)         # → "5 problema(s) crítico(s) encontrado(s)."
 """
+
 from __future__ import annotations
 
 import json

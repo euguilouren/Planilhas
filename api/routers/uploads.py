@@ -1,9 +1,9 @@
 """Endpoints de upload de arquivos e consulta de jobs."""
+
 import json
 import os
-import tempfile
 from pathlib import Path
-from typing import Annotated, List
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -65,12 +65,12 @@ def consultar_job(
     return job
 
 
-@router.get("/", response_model=List[JobResponse])
+@router.get("/", response_model=list[JobResponse])
 def listar_jobs(
     usuario: Annotated[Usuario, Depends(get_current_usuario)],
     db: Session = Depends(get_db),
     status_filtro: str = None,
-) -> List[Job]:
+) -> list[Job]:
     """Lista todos os jobs do tenant com filtro opcional de status."""
     q = db.query(Job).filter(Job.tenant_id == usuario.tenant_id)
     if status_filtro:
@@ -81,13 +81,14 @@ def listar_jobs(
 def _despachar_job(job_id: int, nome: str, conteudo: bytes, tenant_id: int) -> None:
     """Tenta despachar para Celery; se não disponível, processa inline (modo standalone)."""
     # Salvar arquivo temporário que o worker vai processar
-    pasta = Path(os.getenv("PASTA_JOBS", "/tmp/toolkit_jobs"))
+    pasta = Path(os.getenv("PASTA_JOBS", "/tmp/toolkit_jobs"))  # nosec B108
     pasta.mkdir(parents=True, exist_ok=True)
     caminho_temp = pasta / f"job_{job_id}_{nome}"
     caminho_temp.write_bytes(conteudo)
 
     try:
         from worker.tasks import processar_arquivo_task
+
         processar_arquivo_task.delay(job_id, str(caminho_temp), tenant_id)
     except Exception:
         # Celery/Redis não disponível — processar diretamente (modo dev/standalone)
@@ -96,9 +97,11 @@ def _despachar_job(job_id: int, nome: str, conteudo: bytes, tenant_id: int) -> N
 
 def _processar_inline(job_id: int, caminho: str, tenant_id: int) -> None:
     """Processamento síncrono para ambientes sem Celery/Redis."""
+
     from sqlalchemy.orm import Session as _Session
-    from ..db import SessionLocal, Job as _Job
-    import traceback
+
+    from ..db import Job as _Job
+    from ..db import SessionLocal
 
     db: _Session = SessionLocal()
     try:
@@ -109,6 +112,7 @@ def _processar_inline(job_id: int, caminho: str, tenant_id: int) -> None:
         db.commit()
 
         from motor_automatico import ProcessadorArquivo, carregar_config
+
         cfg = carregar_config()
         processador = ProcessadorArquivo(cfg)
         resultado = processador.processar(caminho)
@@ -119,6 +123,7 @@ def _processar_inline(job_id: int, caminho: str, tenant_id: int) -> None:
         if resultado.get("erro"):
             job.erro_mensagem = resultado["erro"]
         from datetime import datetime, timezone
+
         job.concluido_em = datetime.now(tz=timezone.utc)
         db.commit()
     except Exception as exc:

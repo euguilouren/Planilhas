@@ -1,4 +1,5 @@
 """JWT HS256 mínimo usando apenas stdlib — sem dependência de PyJWT ou cryptography."""
+
 import base64
 import hashlib
 import hmac

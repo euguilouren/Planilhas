@@ -1,11 +1,18 @@
 """Banco de dados — SQLAlchemy + modelos multi-tenant."""
+
 import os
-from datetime import datetime
 from typing import Generator
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey, Integer, String, Text,
-    create_engine, func,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 

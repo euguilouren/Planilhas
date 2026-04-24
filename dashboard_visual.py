@@ -3,6 +3,7 @@
 Gerado automaticamente por motor_automatico.py após processar cada arquivo.
 Não requer servidor — abre diretamente no navegador.
 """
+
 from __future__ import annotations
 
 import html
@@ -43,25 +44,25 @@ class GeradorDashboard:
             config: Dict de configuração (para empresa/título/cores).
         """
         cfg = config or {}
-        empresa = _esc(cfg.get('relatorio', {}).get('empresa', 'Empresa'))
-        titulo  = _esc(cfg.get('relatorio', {}).get('titulo', 'Dashboard Financeiro'))
-        agora   = datetime.now(tz=timezone.utc).strftime('%d/%m/%Y %H:%M')
+        empresa = _esc(cfg.get("relatorio", {}).get("empresa", "Empresa"))
+        titulo = _esc(cfg.get("relatorio", {}).get("titulo", "Dashboard Financeiro"))
+        agora = datetime.now(tz=timezone.utc).strftime("%d/%m/%Y %H:%M")
         arquivo = _esc(Path(arquivo_origem).name)
 
         kpis = _calcular_kpis(df_dados, df_fluxo_mensal)
         chart_data = _montar_chart_data(df_fluxo_mensal)
 
-        banner_cor  = '#D1FAE5' if total_criticos == 0 else '#FEE2E2'
-        banner_txt  = '#065F46' if total_criticos == 0 else '#991B1B'
-        banner_icon = '✓' if total_criticos == 0 else '⚠'
-        banner_msg  = (
-            'Análise concluída — dados prontos para apresentação.'
+        banner_cor = "#D1FAE5" if total_criticos == 0 else "#FEE2E2"
+        banner_txt = "#065F46" if total_criticos == 0 else "#991B1B"
+        banner_icon = "✓" if total_criticos == 0 else "⚠"
+        banner_msg = (
+            "Análise concluída — dados prontos para apresentação."
             if total_criticos == 0
-            else f'{total_criticos} problema(s) crítico(s) detectado(s). Revise antes de apresentar.'
+            else f"{total_criticos} problema(s) crítico(s) detectado(s). Revise antes de apresentar."
         )
 
-        secao_fluxo  = _secao_fluxo_tabs(df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual)
-        secao_dre    = _secao_dre(df_dre)
+        secao_fluxo = _secao_fluxo_tabs(df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual)
+        secao_dre = _secao_dre(df_dre)
         secao_pareto = _secao_pareto(df_pareto)
 
         return f"""<!DOCTYPE html>
@@ -182,58 +183,62 @@ tr:hover td{{background:#F9FAFB}}
 
 # ── helpers privados ──────────────────────────────────────────────
 
+
 def _esc(v) -> str:
-    return html.escape(str(v) if v is not None else '')
+    return html.escape(str(v) if v is not None else "")
 
 
 def _calcular_kpis(df: pd.DataFrame, df_mensal: pd.DataFrame | None) -> dict:
     kpis = {
-        'receita_total': 0.0, 'despesa_total': 0.0, 'resultado': 0.0,
-        'margem': 0.0, 'nf_receita': 0, 'nf_despesa': 0,
-        'total_registros': len(df) if df is not None else 0,
-        'ticket_medio': 0.0,
+        "receita_total": 0.0,
+        "despesa_total": 0.0,
+        "resultado": 0.0,
+        "margem": 0.0,
+        "nf_receita": 0,
+        "nf_despesa": 0,
+        "total_registros": len(df) if df is not None else 0,
+        "ticket_medio": 0.0,
     }
     if df_mensal is not None and len(df_mensal):
-        kpis['receita_total'] = float(df_mensal['Receita_RS'].sum())
-        kpis['despesa_total'] = float(df_mensal['Despesa_RS'].sum())
-        kpis['resultado']     = float(df_mensal['Resultado_RS'].sum())
-        kpis['nf_receita']    = int(df_mensal['NFs_Receita'].sum())
-        kpis['nf_despesa']    = int(df_mensal['NFs_Despesa'].sum())
-    elif df is not None and len(df) and 'Valor' in df.columns:
-        valores = pd.to_numeric(df['Valor'], errors='coerce').fillna(0)
-        if 'Tipo' in df.columns:
-            tipos = df['Tipo'].astype(str).str.upper()
-            kpis['receita_total'] = float(valores[tipos == 'RECEITA'].sum())
-            kpis['despesa_total'] = float(valores[tipos == 'DESPESA'].sum())
-            kpis['nf_receita']    = int((tipos == 'RECEITA').sum())
-            kpis['nf_despesa']    = int((tipos == 'DESPESA').sum())
+        kpis["receita_total"] = float(df_mensal["Receita_RS"].sum())
+        kpis["despesa_total"] = float(df_mensal["Despesa_RS"].sum())
+        kpis["resultado"] = float(df_mensal["Resultado_RS"].sum())
+        kpis["nf_receita"] = int(df_mensal["NFs_Receita"].sum())
+        kpis["nf_despesa"] = int(df_mensal["NFs_Despesa"].sum())
+    elif df is not None and len(df) and "Valor" in df.columns:
+        valores = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
+        if "Tipo" in df.columns:
+            tipos = df["Tipo"].astype(str).str.upper()
+            kpis["receita_total"] = float(valores[tipos == "RECEITA"].sum())
+            kpis["despesa_total"] = float(valores[tipos == "DESPESA"].sum())
+            kpis["nf_receita"] = int((tipos == "RECEITA").sum())
+            kpis["nf_despesa"] = int((tipos == "DESPESA").sum())
         else:
-            kpis['receita_total'] = float(valores[valores >= 0].sum())
-            kpis['despesa_total'] = float(valores[valores < 0].abs().sum())
-        kpis['resultado'] = kpis['receita_total'] - kpis['despesa_total']
+            kpis["receita_total"] = float(valores[valores >= 0].sum())
+            kpis["despesa_total"] = float(valores[valores < 0].abs().sum())
+        kpis["resultado"] = kpis["receita_total"] - kpis["despesa_total"]
 
-    if kpis['receita_total'] != 0:
-        kpis['margem'] = kpis['resultado'] / kpis['receita_total'] * 100
-        kpis['ticket_medio'] = (kpis['receita_total'] / kpis['nf_receita']
-                                if kpis['nf_receita'] else 0)
+    if kpis["receita_total"] != 0:
+        kpis["margem"] = kpis["resultado"] / kpis["receita_total"] * 100
+        kpis["ticket_medio"] = kpis["receita_total"] / kpis["nf_receita"] if kpis["nf_receita"] else 0
     return kpis
 
 
 def _montar_chart_data(df_mensal: pd.DataFrame | None) -> dict:
     if df_mensal is None or len(df_mensal) == 0:
-        return {'labels': [], 'receitas': [], 'despesas': [], 'resultados': []}
+        return {"labels": [], "receitas": [], "despesas": [], "resultados": []}
     df = df_mensal.tail(24)  # últimos 24 períodos
     return {
-        'labels':     df['Periodo'].tolist(),
-        'receitas':   [round(float(v), 2) for v in df['Receita_RS']],
-        'despesas':   [round(float(v), 2) for v in df['Despesa_RS']],
-        'resultados': [round(float(v), 2) for v in df['Resultado_RS']],
+        "labels": df["Periodo"].tolist(),
+        "receitas": [round(float(v), 2) for v in df["Receita_RS"]],
+        "despesas": [round(float(v), 2) for v in df["Despesa_RS"]],
+        "resultados": [round(float(v), 2) for v in df["Resultado_RS"]],
     }
 
 
 def _secao_grafico(chart_data: dict) -> str:
-    if not chart_data['labels']:
-        return ''
+    if not chart_data["labels"]:
+        return ""
     return """
 <div class="card">
   <h2>📊 Receitas × Despesas por Período</h2>
@@ -242,8 +247,8 @@ def _secao_grafico(chart_data: dict) -> str:
 
 
 def _js_grafico(chart_data: dict) -> str:
-    if not chart_data['labels']:
-        return ''
+    if not chart_data["labels"]:
+        return ""
     data_json = json.dumps(chart_data, ensure_ascii=False)
     return f"""
 (function(){{
@@ -275,15 +280,15 @@ def _js_grafico(chart_data: dict) -> str:
 def _tabela_fluxo(df: pd.DataFrame | None) -> str:
     if df is None or len(df) == 0:
         return '<p style="color:#6B7280;font-size:13px;padding:8px 0">Nenhum dado disponível.</p>'
-    tot_rec  = float(df['Receita_RS'].sum())
-    tot_desp = float(df['Despesa_RS'].sum())
-    tot_res  = float(df['Resultado_RS'].sum())
-    rows = ''
+    tot_rec = float(df["Receita_RS"].sum())
+    tot_desp = float(df["Despesa_RS"].sum())
+    tot_res = float(df["Resultado_RS"].sum())
+    rows = ""
     for _, r in df.iterrows():
-        res = float(r['Resultado_RS'])
-        cor = '#D1FAE5' if res >= 0 else '#FEE2E2'
-        pct = float(r['Resultado_Pct'])
-        pct_str = (f'+{pct:.1f}%' if pct >= 0 else f'{pct:.1f}%')
+        res = float(r["Resultado_RS"])
+        cor = "#D1FAE5" if res >= 0 else "#FEE2E2"
+        pct = float(r["Resultado_Pct"])
+        pct_str = f"+{pct:.1f}%" if pct >= 0 else f"{pct:.1f}%"
         rows += (
             f"<tr style='background:{cor}'>"
             f"<td style='font-weight:600'>{_esc(str(r['Periodo']))}</td>"
@@ -295,7 +300,7 @@ def _tabela_fluxo(df: pd.DataFrame | None) -> str:
             f"R$ {res:,.2f}</td>"
             f"<td style='text-align:center'>{pct_str}</td></tr>"
         )
-    cor_tot = '#D1FAE5' if tot_res >= 0 else '#FEE2E2'
+    cor_tot = "#D1FAE5" if tot_res >= 0 else "#FEE2E2"
     rows += (
         f"<tr style='background:{cor_tot};font-weight:bold;border-top:2px solid #1A3556'>"
         f"<td>TOTAL</td>"
@@ -322,7 +327,7 @@ def _tabela_fluxo(df: pd.DataFrame | None) -> str:
 
 def _secao_fluxo_tabs(df_d, df_m, df_a) -> str:
     if not any(df is not None and len(df) > 0 for df in [df_d, df_m, df_a]):
-        return ''
+        return ""
     tab_d = _tabela_fluxo(df_d)
     tab_m = _tabela_fluxo(df_m)
     tab_a = _tabela_fluxo(df_a)
@@ -342,17 +347,17 @@ def _secao_fluxo_tabs(df_d, df_m, df_a) -> str:
 
 def _secao_dre(df: pd.DataFrame | None) -> str:
     if df is None or len(df) == 0:
-        return ''
-    rows = ''
+        return ""
+    rows = ""
     for _, r in df.iterrows():
-        linha = _esc(str(r.get('Linha_DRE', r.iloc[0])))
-        val   = float(r.get('Valor_RS', 0))
-        av    = r.get('AV_%', '')
-        nivel = str(r.get('Nivel', '')).strip()
-        is_total = 'TOTAL' in linha.upper() or 'LUCRO' in linha.upper() or 'RESULTADO' in linha.upper()
-        peso = 'font-weight:bold' if is_total else ''
-        cor_v = '#065F46' if val >= 0 else '#991B1B'
-        indent = 'padding-left:24px' if nivel == '2' else ''
+        linha = _esc(str(r.get("Linha_DRE", r.iloc[0])))
+        val = float(r.get("Valor_RS", 0))
+        av = r.get("AV_%", "")
+        nivel = str(r.get("Nivel", "")).strip()
+        is_total = "TOTAL" in linha.upper() or "LUCRO" in linha.upper() or "RESULTADO" in linha.upper()
+        peso = "font-weight:bold" if is_total else ""
+        cor_v = "#065F46" if val >= 0 else "#991B1B"
+        indent = "padding-left:24px" if nivel == "2" else ""
         rows += (
             f"<tr><td style='{peso};{indent}'>{linha}</td>"
             f"<td style='text-align:right;{cor_v};{peso}'>R$ {val:,.2f}</td>"
@@ -372,20 +377,20 @@ def _secao_dre(df: pd.DataFrame | None) -> str:
 
 def _secao_pareto(df: pd.DataFrame | None) -> str:
     if df is None or len(df) == 0:
-        return ''
+        return ""
     col_ent = df.columns[0]
-    max_val = float(df['Total_RS'].max()) if len(df) else 1
-    rows = ''
+    max_val = float(df["Total_RS"].max()) if len(df) else 1
+    rows = ""
     for _, r in df.head(15).iterrows():
-        nome    = _esc(str(r[col_ent]))
-        val     = float(r.get('Total_RS', 0))
-        pct     = float(r.get('Percentual', 0))
-        acum    = float(r.get('Acumulado_%', 0))
-        classe  = _esc(str(r.get('Classe_Pareto', '')))
-        rank    = int(r.get('Ranking', 0))
-        tipo_b  = _esc(str(r.get('Tipo', '')))
+        nome = _esc(str(r[col_ent]))
+        val = float(r.get("Total_RS", 0))
+        pct = float(r.get("Percentual", 0))
+        acum = float(r.get("Acumulado_%", 0))
+        classe = _esc(str(r.get("Classe_Pareto", "")))
+        rank = int(r.get("Ranking", 0))
+        tipo_b = _esc(str(r.get("Tipo", "")))
         pct_bar = min(val / max_val * 100, 100)
-        cor_cls = '#C9A227' if 'A' in classe else '#9BA8B5'
+        cor_cls = "#C9A227" if "A" in classe else "#9BA8B5"
         rows += (
             f"<tr><td style='text-align:center'>{rank}</td>"
             f"<td>{nome}</td>"

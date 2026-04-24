@@ -7,11 +7,12 @@ Uso:
     pptx_bytes = ExportadorPPT.gerar(kpis, df_mensal, df_dre, df_pareto, titulo)
     Path("apresentacao.pptx").write_bytes(pptx_bytes)
 """
+
 from __future__ import annotations
 
 import io
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -29,20 +30,18 @@ class ExportadorPPT:
     @staticmethod
     def gerar(
         kpis: dict[str, Any],
-        df_mensal: Optional[pd.DataFrame] = None,
-        df_dre: Optional[pd.DataFrame] = None,
-        df_pareto: Optional[pd.DataFrame] = None,
+        df_mensal: pd.DataFrame | None = None,
+        df_dre: pd.DataFrame | None = None,
+        df_pareto: pd.DataFrame | None = None,
         titulo: str = "Análise Financeira",
         nome_empresa: str = "",
     ) -> bytes:
         """Retorna bytes do arquivo .pptx."""
         try:
             from pptx import Presentation  # noqa: PLC0415
-            from pptx.util import Inches, Pt
+            from pptx.util import Inches
         except ImportError as exc:
-            raise ImportError(
-                "python-pptx não instalado. Execute: pip install python-pptx matplotlib"
-            ) from exc
+            raise ImportError("python-pptx não instalado. Execute: pip install python-pptx matplotlib") from exc
 
         prs = Presentation()
         prs.slide_width = Inches(13.33)
@@ -63,8 +62,8 @@ class ExportadorPPT:
 
 
 def _slide_capa(prs: Any, titulo: str, empresa: str) -> None:
-    from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
+    from pptx.util import Inches, Pt
 
     layout = prs.slide_layouts[6]  # blank
     slide = prs.slides.add_slide(layout)
@@ -87,8 +86,8 @@ def _slide_capa(prs: Any, titulo: str, empresa: str) -> None:
 
 
 def _slide_kpis(prs: Any, kpis: dict) -> None:
-    from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
+    from pptx.util import Inches, Pt
 
     layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(layout)
@@ -117,7 +116,11 @@ def _slide_kpis(prs: Any, kpis: dict) -> None:
         shape.line.fill.background()
         tf = shape.text_frame
         tf.word_wrap = True
-        valor_str = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if isinstance(valor, float) else str(valor)
+        valor_str = (
+            f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            if isinstance(valor, float)
+            else str(valor)
+        )
         tf.text = f"{label}\n{valor_str}"
         tf.paragraphs[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
         tf.paragraphs[0].font.size = Pt(13)
@@ -174,8 +177,8 @@ def _slide_pareto(prs: Any, df_pareto: pd.DataFrame) -> None:
 
 
 def _titulo_slide(slide: Any, texto: str) -> None:
-    from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
+    from pptx.util import Inches, Pt
 
     tf = slide.shapes.add_textbox(Inches(0.3), Inches(0.15), Inches(12.5), Inches(0.7))
     tf.text_frame.text = texto
@@ -186,8 +189,8 @@ def _titulo_slide(slide: Any, texto: str) -> None:
 
 
 def _tabela_pptx(slide: Any, df: pd.DataFrame) -> None:
-    from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
+    from pptx.util import Inches, Pt
 
     rows, cols = len(df) + 1, len(df.columns)
     table = slide.shapes.add_table(rows, cols, Inches(0.3), Inches(1.1), Inches(12.5), Inches(5.8)).table

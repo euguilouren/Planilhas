@@ -6,12 +6,13 @@ Docs: https://developers.contaazul.com/
 Config esperada:
     {"client_id": "...", "client_secret": "..."}
 """
+
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date
-from urllib import request, error
-import json
+from urllib import error, request
 
 import pandas as pd
 
@@ -30,15 +31,16 @@ class ConectorContaAzul(ConectorERP):
         return ["client_id", "client_secret"]
 
     def _obter_token(self) -> str:
-        payload = json.dumps({
-            "grant_type": "client_credentials",
-            "client_id": self.config["client_id"],
-            "client_secret": self.config["client_secret"],
-        }).encode()
-        req = request.Request(_TOKEN_URL, data=payload, method="POST",
-                              headers={"Content-Type": "application/json"})
+        payload = json.dumps(
+            {
+                "grant_type": "client_credentials",
+                "client_id": self.config["client_id"],
+                "client_secret": self.config["client_secret"],
+            }
+        ).encode()
+        req = request.Request(_TOKEN_URL, data=payload, method="POST", headers={"Content-Type": "application/json"})
         try:
-            with request.urlopen(req, timeout=15) as resp:
+            with request.urlopen(req, timeout=15) as resp:  # nosec B310
                 return json.loads(resp.read()).get("access_token", "")
         except (error.URLError, json.JSONDecodeError) as exc:
             logger.error("[ContaAzul] Falha ao obter token: %s", exc)
@@ -63,7 +65,7 @@ class ConectorContaAzul(ConectorERP):
         )
         req = request.Request(url, headers={"Authorization": f"Bearer {token}"})
         try:
-            with request.urlopen(req, timeout=30) as resp:
+            with request.urlopen(req, timeout=30) as resp:  # nosec B310
                 items = json.loads(resp.read())
         except (error.URLError, json.JSONDecodeError) as exc:
             logger.error("[ContaAzul] Erro ao buscar lançamentos: %s", exc)
@@ -71,13 +73,15 @@ class ConectorContaAzul(ConectorERP):
 
         registros = []
         for item in items if isinstance(items, list) else []:
-            registros.append({
-                "NF":         str(item.get("number", "")),
-                "Data":       item.get("emission_date", "")[:10].replace("-", "/")[::-1].replace("/", "-"),
-                "Vencimento": item.get("due_date", "")[:10],
-                "Valor":      float(item.get("value", 0)),
-                "Categoria":  item.get("category_name", "RECEITA"),
-                "Cliente":    item.get("customer_name", ""),
-                "Tipo":       "RECEITA",
-            })
+            registros.append(
+                {
+                    "NF": str(item.get("number", "")),
+                    "Data": item.get("emission_date", "")[:10].replace("-", "/")[::-1].replace("/", "-"),
+                    "Vencimento": item.get("due_date", "")[:10],
+                    "Valor": float(item.get("value", 0)),
+                    "Categoria": item.get("category_name", "RECEITA"),
+                    "Cliente": item.get("customer_name", ""),
+                    "Tipo": "RECEITA",
+                }
+            )
         return self._schema_padrao(registros)

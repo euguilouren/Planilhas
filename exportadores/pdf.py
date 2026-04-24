@@ -9,11 +9,11 @@ Uso:
     pdf_bytes = ExportadorPDF.gerar(html_str)
     Path("relatorio.pdf").write_bytes(pdf_bytes)
 """
+
 from __future__ import annotations
 
 import importlib
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class ExportadorPDF:
     """Converte HTML em bytes PDF."""
 
     @staticmethod
-    def gerar(html: str, base_url: Optional[str] = None) -> bytes:
+    def gerar(html: str, base_url: str | None = None) -> bytes:
         """
         Converte *html* para PDF.
 
@@ -42,15 +42,13 @@ class ExportadorPDF:
     @staticmethod
     def disponivel() -> bool:
         """Retorna True se pelo menos um backend PDF estiver disponível."""
-        return (
-            importlib.util.find_spec("weasyprint") is not None
-            or importlib.util.find_spec("pdfkit") is not None
-        )
+        return importlib.util.find_spec("weasyprint") is not None or importlib.util.find_spec("pdfkit") is not None
 
 
-def _tentar_weasyprint(html: str, base_url: Optional[str]) -> Optional[bytes]:
+def _tentar_weasyprint(html: str, base_url: str | None) -> bytes | None:
     try:
         import weasyprint  # noqa: PLC0415
+
         documento = weasyprint.HTML(string=html, base_url=base_url)
         return documento.write_pdf()
     except ImportError:
@@ -60,10 +58,12 @@ def _tentar_weasyprint(html: str, base_url: Optional[str]) -> Optional[bytes]:
         return None
 
 
-def _tentar_pdfkit(html: str, _base_url: Optional[str]) -> Optional[bytes]:
+def _tentar_pdfkit(html: str, _base_url: str | None) -> bytes | None:
     try:
+        import os
+        import tempfile
+
         import pdfkit  # noqa: PLC0415
-        import tempfile, os
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp_path = tmp.name

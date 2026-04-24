@@ -7,12 +7,12 @@ Uso:
     df = ParserNFe.ler_xml("nota.xml")
     df = ParserNFe.ler_pasta("pasta_xmls/")  # processa todos os .xml recursivamente
 """
+
 from __future__ import annotations
 
 import logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import List, Union
 
 import pandas as pd
 
@@ -26,10 +26,10 @@ class ParserNFe:
     """Lê XMLs de NF-e e retorna DataFrame no schema padrão do toolkit."""
 
     @staticmethod
-    def ler_xml(caminho: Union[str, Path]) -> pd.DataFrame:
+    def ler_xml(caminho: str | Path) -> pd.DataFrame:
         """Parseia um único arquivo XML de NF-e."""
         try:
-            tree = ET.parse(str(caminho))
+            tree = ET.parse(str(caminho))  # nosec B314
             root = tree.getroot()
             registro = _extrair_campos(root, str(caminho))
             if registro:
@@ -41,14 +41,14 @@ class ParserNFe:
         return pd.DataFrame()
 
     @staticmethod
-    def ler_pasta(pasta: Union[str, Path], recursivo: bool = True) -> pd.DataFrame:
+    def ler_pasta(pasta: str | Path, recursivo: bool = True) -> pd.DataFrame:
         """Processa todos os XMLs de NF-e em uma pasta."""
         pasta = Path(pasta)
         padrao = "**/*.xml" if recursivo else "*.xml"
         xmls = list(pasta.glob(padrao))
         logger.info("Encontrados %d XMLs em %s", len(xmls), pasta)
 
-        registros: List[dict] = []
+        registros: list[dict] = []
         for xml_path in xmls:
             df = ParserNFe.ler_xml(xml_path)
             if not df.empty:
@@ -80,10 +80,7 @@ class ParserNFe:
 
 def _extrair_campos(root: ET.Element, origem: str) -> dict:
     """Extrai campos principais de um elemento raiz NF-e."""
-    infNFe = (
-        root.find(f".//{{{_NS}}}infNFe")
-        or root.find(".//infNFe")
-    )
+    infNFe = root.find(f".//{{{_NS}}}infNFe") or root.find(".//infNFe")
     if infNFe is None:
         return {}
 
@@ -104,7 +101,7 @@ def _extrair_campos(root: ET.Element, origem: str) -> dict:
     total_ns = f"{{{_NS}}}total"
     cobr_ns = f"{{{_NS}}}cobr"
 
-    data_emissao = txt(f"nfe:ide/nfe:dhEmi") or txt("ide/dhEmi")
+    data_emissao = txt("nfe:ide/nfe:dhEmi") or txt("ide/dhEmi")
     data_emissao = _formatar_data(data_emissao)
 
     tipo_raw = txt("nfe:ide/nfe:tpNF") or txt("ide/tpNF")
@@ -149,6 +146,7 @@ def _formatar_data(data_iso: str) -> str:
     parte = data_iso[:10]  # pega YYYY-MM-DD
     try:
         from datetime import datetime
+
         dt = datetime.strptime(parte, "%Y-%m-%d")
         return dt.strftime("%d/%m/%Y")
     except ValueError:

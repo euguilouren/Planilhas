@@ -1,4 +1,5 @@
 """Health check endpoints para liveness e readiness probes."""
+
 import os
 from datetime import datetime, timezone
 
@@ -25,7 +26,6 @@ def readiness() -> dict:
     redis_ok = _checar_redis()
 
     if not db_ok:
-        from fastapi import Response
         return {"status": "degradado", "db": "erro", "redis": "ok" if redis_ok else "erro"}
 
     return {
@@ -49,6 +49,7 @@ def _checar_redis() -> bool:
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     try:
         import redis as redis_lib
+
         r = redis_lib.from_url(redis_url, socket_connect_timeout=1)
         r.ping()
         return True

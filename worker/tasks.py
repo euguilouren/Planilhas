@@ -11,6 +11,7 @@ Variáveis de ambiente:
     DATABASE_URL — SQLAlchemy URL (padrão: sqlite:///./toolkit.db)
     PASTA_JOBS   — pasta com arquivos temporários dos jobs
 """
+
 import json
 import logging
 import os
@@ -36,8 +37,8 @@ app.conf.update(
     result_serializer="json",
     timezone="America/Sao_Paulo",
     enable_utc=True,
-    task_soft_time_limit=300,   # 5 min — SIGTERM
-    task_time_limit=360,        # 6 min — SIGKILL
+    task_soft_time_limit=300,  # 5 min — SIGTERM
+    task_time_limit=360,  # 6 min — SIGKILL
     worker_max_tasks_per_child=50,  # reinicia worker após 50 tarefas (evita memory leak)
 )
 
@@ -45,7 +46,7 @@ app.conf.update(
 @app.task(bind=True, max_retries=2, default_retry_delay=10)
 def processar_arquivo_task(self, job_id: int, caminho: str, tenant_id: int) -> dict:
     """Tarefa Celery: processa um arquivo financeiro e atualiza o Job no banco."""
-    from api.db import SessionLocal, Job
+    from api.db import Job, SessionLocal
 
     db = SessionLocal()
     try:
@@ -61,6 +62,7 @@ def processar_arquivo_task(self, job_id: int, caminho: str, tenant_id: int) -> d
         logger.info("[job=%d] Iniciando processamento: %s", job_id, caminho)
 
         from motor_automatico import ProcessadorArquivo, carregar_config
+
         cfg = carregar_config()
         processador = ProcessadorArquivo(cfg)
 
@@ -93,6 +95,6 @@ def processar_arquivo_task(self, job_id: int, caminho: str, tenant_id: int) -> d
             job.status = "erro"
             job.erro_mensagem = str(exc)
             db.commit()
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
     finally:
         db.close()

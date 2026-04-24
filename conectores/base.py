@@ -2,12 +2,12 @@
 Classe abstrata para conectores ERP.
 Cada conector implementa buscar_lancamentos() e retorna DataFrame no schema padrão.
 """
+
 from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
 from datetime import date
-from typing import Optional
 
 import pandas as pd
 

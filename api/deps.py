@@ -1,4 +1,5 @@
 """Dependências injetadas nos endpoints FastAPI."""
+
 import os
 from typing import Annotated
 
@@ -7,7 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from . import _jwt
-from .db import Job, Tenant, Usuario, get_db
+from .db import Job, Usuario, get_db
 from .models import TokenData
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "MUDE_EM_PRODUCAO_use_openssl_rand_hex_32")
@@ -25,7 +26,7 @@ def _decodificar_token(token: str) -> TokenData:
         )
     except (ValueError, KeyError) as exc:
         detail = "Token expirado" if "expirado" in str(exc) else "Token inválido"
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail) from exc
 
 
 def get_token_data(
@@ -38,11 +39,7 @@ def get_current_usuario(
     token_data: Annotated[TokenData, Depends(get_token_data)],
     db: Annotated[Session, Depends(get_db)],
 ) -> Usuario:
-    usuario = (
-        db.query(Usuario)
-        .filter(Usuario.email == token_data.sub, Usuario.ativo == True)  # noqa: E712
-        .first()
-    )
+    usuario = db.query(Usuario).filter(Usuario.email == token_data.sub, Usuario.ativo == True).first()  # noqa: E712
     if not usuario:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não encontrado")
     return usuario
