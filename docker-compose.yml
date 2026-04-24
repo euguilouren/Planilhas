@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  toolkit:
+    build: .
+    container_name: toolkit-financeiro
+    restart: unless-stopped
+    environment:
+      - EMAIL_SENHA=${EMAIL_SENHA:-}
+    volumes:
+      - ./pasta_entrada:/app/pasta_entrada
+      - ./pasta_saida:/app/pasta_saida
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["python", "motor_automatico.py", "--intervalo", "10"]
+
+  # Modo one-shot: processa arquivos em pasta_entrada e sai
+  toolkit-once:
+    build: .
+    container_name: toolkit-once
+    profiles: ["once"]
+    environment:
+      - EMAIL_SENHA=${EMAIL_SENHA:-}
+    volumes:
+      - ./pasta_entrada:/app/pasta_entrada
+      - ./pasta_saida:/app/pasta_saida
+      - ./config.yaml:/app/config.yaml:ro
+    command: ["python", "motor_automatico.py", "--once"]

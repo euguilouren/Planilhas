@@ -1,0 +1,30 @@
+[Unit]
+Description=Toolkit Financeiro — Motor Autônomo
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/toolkit-financeiro
+ExecStart=/opt/toolkit-financeiro/.venv/bin/python motor_automatico.py --intervalo 10
+Restart=on-failure
+RestartSec=10s
+
+# Credencial SMTP via variável de ambiente (não expor no config.yaml)
+EnvironmentFile=-/opt/toolkit-financeiro/.env
+
+# Logs via journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=toolkit-financeiro
+
+# Sandboxing básico
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/toolkit-financeiro/pasta_entrada /opt/toolkit-financeiro/pasta_saida
+
+[Install]
+WantedBy=multi-user.target

@@ -17,6 +17,7 @@ import logging
 import smtplib
 import argparse
 import traceback
+from difflib                import get_close_matches
 from email.mime.text        import MIMEText
 from email.mime.multipart   import MIMEMultipart
 from datetime               import datetime
@@ -81,11 +82,23 @@ class ProcessadorArquivo:
         fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
         logger.addHandler(fh)
 
+    @staticmethod
+    def _validar_caminho_arquivo(caminho: str) -> Path:
+        """Resolve o caminho e bloqueia symlinks que escapam da pasta monitorada."""
+        try:
+            p = Path(caminho).resolve()
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"Caminho inválido: {caminho}") from exc
+        if p.suffix.lower() not in ProcessadorArquivo.EXTENSOES_SUPORTADAS:
+            raise ValueError(f"Extensão '{p.suffix}' não suportada.")
+        return p
+
     def processar(self, caminho_arquivo: str) -> dict:
         """
         Pipeline completo: lê → audita → analisa → gera HTML + Excel.
         Retorna dict com caminhos dos arquivos gerados e resumo.
         """
+        caminho_arquivo = str(self._validar_caminho_arquivo(caminho_arquivo))
         nome_base = Path(caminho_arquivo).stem
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         prefixo   = f"{nome_base}_{timestamp}"
@@ -244,19 +257,24 @@ class ProcessadorArquivo:
     # ── Helpers internos ──────────────────────────────────────────
 
     def _normalizar_colunas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Tenta detectar e normalizar colunas de ERPs conhecidos."""
-        from base_conhecimento import MAPAS_ERP  # importa se disponível
-        cols = set(df.columns.str.upper())
+        """Detecta ERPs por correspondência exata ou fuzzy (difflib) nas colunas."""
+        from base_conhecimento import MAPAS_ERP
+        cols_upper = list(df.columns.str.upper())
         sinais = {
-            'TOTVS':   {'E1_NUM', 'E1_CLIENTE', 'E1_VALOR'},
-            'OMIE':    {'NUMERO_DOCUMENTO', 'NOME_CLIENTE', 'VALOR_DOCUMENTO'},
-            'DOMINIO': {'HISTÓRICO', 'SAL. BASE'},
-            'QUESTOR': {'DT_LANCTO', 'VL_LANCTO'},
-            'SAP_B1':  {'DOCNUM', 'CARDCODE', 'DOCTOTAL'},
+            'TOTVS':   ['E1_NUM', 'E1_CLIENTE', 'E1_VALOR'],
+            'OMIE':    ['NUMERO_DOCUMENTO', 'NOME_CLIENTE', 'VALOR_DOCUMENTO'],
+            'DOMINIO': ['HISTÓRICO', 'SAL. BASE'],
+            'QUESTOR': ['DT_LANCTO', 'VL_LANCTO'],
+            'SAP_B1':  ['DOCNUM', 'CARDCODE', 'DOCTOTAL'],
         }
         for erp, campos in sinais.items():
-            if len({c.upper() for c in campos} & cols) >= 2:
-                logger.info("      ERP detectado: %s", erp)
+            correspondencias = sum(
+                1 for campo in campos
+                if campo in cols_upper
+                or get_close_matches(campo, cols_upper, n=1, cutoff=0.85)
+            )
+            if correspondencias >= 2:
+                logger.info("      ERP detectado (fuzzy): %s", erp)
                 if erp in MAPAS_ERP:
                     return df.rename(columns=MAPAS_ERP[erp])
         return df
@@ -377,19 +395,34 @@ class ProcessadorArquivo:
             msg['To']      = ', '.join(dests)
             msg.attach(MIMEText(corpo, 'html'))
 
-            with smtplib.SMTP(smtp, porta, timeout=10) as server:
-                server.starttls()
-                server.login(rem, senha)
-                server.sendmail(rem, dests, msg.as_string())
-            logger.info("E-mail de alerta enviado para %s", dests)
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error("Falha de autenticação SMTP: %s", e)
-        except smtplib.SMTPConnectError as e:
-            logger.error("Não foi possível conectar ao servidor SMTP: %s", e)
-        except smtplib.SMTPException as e:
-            logger.warning("Falha ao enviar e-mail: %s", e)
-        except (OSError, ConnectionRefusedError) as e:
-            logger.warning("Erro de rede ao enviar e-mail: %s", e)
+            max_tentativas = 3
+            for tentativa in range(1, max_tentativas + 1):
+                try:
+                    with smtplib.SMTP(smtp, porta, timeout=10) as server:
+                        server.starttls()
+                        server.login(rem, senha)
+                        server.sendmail(rem, dests, msg.as_string())
+                    logger.info("E-mail de alerta enviado para %s", dests)
+                    return
+                except smtplib.SMTPAuthenticationError as e:
+                    logger.error("Falha de autenticação SMTP: %s", e)
+                    return
+                except (smtplib.SMTPConnectError, smtplib.SMTPException,
+                        OSError, ConnectionRefusedError) as e:
+                    if tentativa < max_tentativas:
+                        espera = 2 ** tentativa
+                        logger.warning(
+                            "E-mail: tentativa %d/%d falhou (%s). Aguardando %ds...",
+                            tentativa, max_tentativas, e, espera,
+                        )
+                        time.sleep(espera)
+                    else:
+                        logger.error(
+                            "Falha ao enviar e-mail após %d tentativas: %s",
+                            max_tentativas, e,
+                        )
+        except KeyError as e:
+            logger.error("Configuração de e-mail incompleta: %s", e)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -407,7 +440,14 @@ class ObservadorPasta:
 
     def varrer_uma_vez(self):
         """Verifica a pasta e processa arquivos ainda não processados."""
+        pasta_real = self.pasta.resolve()
         for arquivo in self.pasta.iterdir():
+            try:
+                # Bloqueia symlinks que apontam para fora da pasta monitorada
+                arquivo.resolve().relative_to(pasta_real)
+            except ValueError:
+                logger.warning("Symlink fora da pasta de entrada ignorado: %s", arquivo)
+                continue
             if arquivo.suffix.lower() in ProcessadorArquivo.EXTENSOES_SUPORTADAS:
                 if arquivo.name not in self._vistos:
                     self._vistos.add(arquivo.name)

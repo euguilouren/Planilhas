@@ -7,6 +7,9 @@ conciliação, auditoria e estruturação profissional de planilhas.
 Requer: pandas, openpyxl, numpy
 """
 
+__version__ = "1.2.0"
+__author__  = "Luan Guilherme Lourenço"
+
 import os
 import re
 import json
@@ -310,6 +313,18 @@ class Auditor:
 
     @staticmethod
     def detectar_duplicatas(df: pd.DataFrame, colunas_chave: list, aba: str = '') -> pd.DataFrame:
+        """Detecta linhas com chaves duplicadas no DataFrame.
+
+        Args:
+            df: DataFrame a ser auditado.
+            colunas_chave: Colunas usadas como chave de unicidade (ex.: ['NF']).
+            aba: Nome da aba de origem, inserido no resultado para rastreabilidade.
+
+        Returns:
+            DataFrame com as linhas duplicadas e colunas auxiliares
+            ``_status_auditoria``, ``_aba_origem``, ``_linha_excel`` e ``_severidade``.
+            Vazio se não houver duplicatas ou se nenhuma coluna-chave existir.
+        """
         colunas_existentes = [c for c in colunas_chave if c in df.columns]
         if not colunas_existentes:
             return pd.DataFrame()
@@ -324,6 +339,18 @@ class Auditor:
 
     @staticmethod
     def detectar_outliers(df: pd.DataFrame, coluna_valor: str, n_desvios: float = 3.0, aba: str = '') -> pd.DataFrame:
+        """Identifica valores estatisticamente atípicos pelo método Z-score.
+
+        Args:
+            df: DataFrame contendo os dados.
+            coluna_valor: Coluna numérica a analisar.
+            n_desvios: Limiar em desvios-padrão para classificar como outlier.
+            aba: Nome da aba de origem para rastreabilidade.
+
+        Returns:
+            DataFrame com as linhas outliers e colunas auxiliares de diagnóstico.
+            Retorna DataFrame vazio se a coluna não existir ou desvio for zero.
+        """
         if coluna_valor not in df.columns:
             return pd.DataFrame()
         valores = pd.to_numeric(df[coluna_valor], errors='coerce')
@@ -654,6 +681,20 @@ class AnalistaFinanceiro:
         faixa_atencao: int = 30,
         faixa_critica: int = 90,
     ) -> pd.DataFrame:
+        """Calcula o aging de recebíveis agrupado por faixa de vencimento.
+
+        Args:
+            df: DataFrame com os títulos a receber.
+            col_vencimento: Coluna com a data de vencimento.
+            col_valor: Coluna com o valor do título.
+            data_ref: Data de referência; usa ``datetime.now()`` se omitida.
+            faixa_atencao: Dias de atraso para faixa de atenção.
+            faixa_critica: Dias de atraso para faixa crítica.
+
+        Returns:
+            DataFrame com colunas ``Faixa_Aging``, ``Quantidade``,
+            ``Total_RS``, ``Percentual`` e ``PCLD_Sugerida_RS``.
+        """
         if data_ref is None:
             data_ref = datetime.now()
         df = df.copy()

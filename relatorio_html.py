@@ -39,7 +39,21 @@ class GeradorHTML:
         df_ticket:       pd.DataFrame  = None,
         diagnostico:     dict          = None,
     ) -> str:
-        """Retorna string HTML completa do relatório."""
+        """Gera relatório HTML autocontido a partir dos dados processados.
+
+        Args:
+            arquivo_origem: Nome do arquivo de origem (exibido no cabeçalho).
+            df_dados: DataFrame principal com todos os registros.
+            df_auditoria: DataFrame com os problemas detectados pela auditoria.
+            df_aging: Aging de recebíveis (opcional).
+            df_dre: Demonstrativo de Resultado (opcional).
+            df_pareto: Análise Pareto por entidade (opcional).
+            df_ticket: Ticket médio por entidade (opcional, não exibido ainda).
+            diagnostico: Dict de diagnóstico retornado por :meth:`Leitor.ler_arquivo`.
+
+        Returns:
+            String HTML completa pronta para ser salva em disco.
+        """
         logger.info("Gerando relatório HTML para: %s", arquivo_origem)
         empresa = self._esc(self.cfg.get('relatorio', {}).get('empresa', 'Empresa'))
         titulo  = self._esc(self.cfg.get('relatorio', {}).get('titulo',  'Relatório Financeiro'))
@@ -103,46 +117,46 @@ class GeradorHTML:
 </head>
 <body>
 
-<div class="header">
+<header class="header" role="banner">
   <div>
     <div class="empresa">{empresa}</div>
     <h1>{titulo}</h1>
   </div>
-  <div class="meta">
+  <div class="meta" aria-label="Metadados do relatório">
     Arquivo: {self._esc(arquivo_origem)}<br>
     Gerado em: {agora}<br>
     {total_registros:,} registros processados
   </div>
-</div>
+</header>
 
-<div class="container">
+<main class="container" role="main" aria-label="Relatório financeiro">
 """
         # ── KPIs ──────────────────────────────────────────────────
         kpi_critico_class = 'critico' if total_criticos > 0 else 'ok'
         kpi_prob_class    = 'critico' if total_criticos > 0 else ('ok' if total_problemas == 0 else '')
         html += f"""
-  <div class="kpis">
-    <div class="kpi">
+  <section class="kpis" role="region" aria-label="Indicadores principais">
+    <div class="kpi" role="article" aria-label="Total de registros: {total_registros:,}">
       <div class="label">Total de Registros</div>
-      <div class="valor">{total_registros:,}</div>
+      <div class="valor" aria-live="polite">{total_registros:,}</div>
       <div class="sub">{arquivo_origem}</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" role="article" aria-label="Total geral em reais: {total_valor:,.0f}">
       <div class="label">Total Geral (R$)</div>
-      <div class="valor">R$ {total_valor:,.0f}</div>
+      <div class="valor" aria-live="polite">R$ {total_valor:,.0f}</div>
       <div class="sub">soma da coluna {self._esc(col_valor)}</div>
     </div>
-    <div class="kpi {kpi_critico_class}">
+    <div class="kpi {kpi_critico_class}" role="article" aria-label="Problemas críticos: {total_criticos}">
       <div class="label">Problemas Críticos</div>
-      <div class="valor">{total_criticos}</div>
+      <div class="valor" aria-live="assertive">{total_criticos}</div>
       <div class="sub">requerem ação imediata</div>
     </div>
-    <div class="kpi {kpi_prob_class}">
+    <div class="kpi {kpi_prob_class}" role="article" aria-label="Total de alertas: {total_problemas}">
       <div class="label">Total de Alertas</div>
-      <div class="valor">{total_problemas}</div>
+      <div class="valor" aria-live="polite">{total_problemas}</div>
       <div class="sub">todos os níveis</div>
     </div>
-  </div>
+  </section>
 """
         # ── Diagnóstico de Formato ─────────────────────────────────
         if diagnostico and diagnostico.get('problemas_formato'):
@@ -153,10 +167,10 @@ class GeradorHTML:
             html += self._secao_auditoria(df_auditoria)
         else:
             html += """
-  <div class="card">
+  <section class="card" role="region" aria-label="Auditoria de dados">
     <h2>✓ Auditoria</h2>
-    <p style="color:#065F46;font-weight:600;font-size:14px">Nenhum problema encontrado nos dados.</p>
-  </div>
+    <p style="color:#065F46;font-weight:600;font-size:14px" role="status">Nenhum problema encontrado nos dados.</p>
+  </section>
 """
         # ── Aging ─────────────────────────────────────────────────
         if df_aging is not None and len(df_aging):
@@ -171,12 +185,12 @@ class GeradorHTML:
             html += self._secao_pareto(df_pareto)
 
         html += f"""
-</div>
-<div class="footer">
+</main>
+<footer class="footer" role="contentinfo">
   Relatório gerado automaticamente pelo Toolkit Financeiro &bull; {agora}
   <br>
   <span style="font-size:10px;opacity:0.7;">Powered by <strong>Luan Guilherme Lourenço</strong></span>
-</div>
+</footer>
 </body></html>"""
         logger.info("Relatório HTML gerado (%d bytes)", len(html))
         return html
@@ -190,7 +204,29 @@ class GeradorHTML:
     def _badge(self, sev: str) -> str:
         cls = {'CRÍTICA': 'critica', 'ALTA': 'alta', 'MÉDIA': 'media',
                'BAIXA': 'baixa', 'OK': 'ok'}.get(sev.upper(), 'media')
-        return f'<span class="badge badge-{cls}">{self._esc(sev)}</span>'
+        return f'<span class="badge badge-{cls}" role="status" aria-label="Severidade: {self._esc(sev)}">{self._esc(sev)}</span>'
+
+    def gerar_pdf(self, html_str: str, caminho_pdf: str) -> bool:
+        """Converte HTML gerado em PDF usando WeasyPrint.
+
+        Args:
+            html_str: String HTML retornada por :meth:`gerar`.
+            caminho_pdf: Caminho de destino para o arquivo PDF.
+
+        Returns:
+            True se o PDF foi gerado, False se WeasyPrint não estiver instalado.
+        """
+        try:
+            from weasyprint import HTML as WeasyprintHTML  # optional dependency
+            WeasyprintHTML(string=html_str).write_pdf(caminho_pdf)
+            logger.info("PDF gerado: %s", caminho_pdf)
+            return True
+        except ImportError:
+            logger.warning(
+                "WeasyPrint não instalado — PDF ignorado. "
+                "Instale com: pip install weasyprint"
+            )
+            return False
 
     def _secao_diagnostico(self, diag: dict) -> str:
         rows = ''
@@ -200,11 +236,13 @@ class GeradorHTML:
                      f"<td>{self._badge(p.get('severidade',''))}</td>"
                      f"<td>{self._esc(p.get('descricao',''))}</td></tr>")
         return f"""
-  <div class="card">
+  <section class="card" role="region" aria-label="Problemas de formato detectados">
     <h2>⚠ Problemas de Formato ({len(diag['problemas_formato'])})</h2>
-    <table><thead><tr><th>Aba</th><th>Coluna</th><th>Severidade</th><th>Descrição</th></tr></thead>
-    <tbody>{rows}</tbody></table>
-  </div>
+    <table role="table" aria-label="Lista de problemas de formato">
+      <thead><tr><th scope="col">Aba</th><th scope="col">Coluna</th><th scope="col">Severidade</th><th scope="col">Descrição</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </section>
 """
 
     def _secao_auditoria(self, df: pd.DataFrame) -> str:
@@ -223,13 +261,15 @@ class GeradorHTML:
                      f"<td>{self._esc(r.get('Descrição',''))}</td>"
                      f"<td style='text-align:right'>{imp_str}</td></tr>")
         return f"""
-  <div class="card">
+  <section class="card" role="region" aria-label="Log de auditoria com {len(df)} problemas">
     <h2>🔍 Log de Auditoria ({len(df)} problemas)</h2>
-    <table><thead><tr>
-      <th>Severidade</th><th>Tipo</th><th>Linha(s)</th>
-      <th>Coluna</th><th>Descrição</th><th>Impacto R$</th>
-    </tr></thead><tbody>{rows}</tbody></table>
-  </div>
+    <table role="table" aria-label="Problemas de auditoria">
+      <thead><tr>
+        <th scope="col">Severidade</th><th scope="col">Tipo</th><th scope="col">Linha(s)</th>
+        <th scope="col">Coluna</th><th scope="col">Descrição</th><th scope="col">Impacto R$</th>
+      </tr></thead><tbody>{rows}</tbody>
+    </table>
+  </section>
 """
 
     def _secao_aging(self, df: pd.DataFrame) -> str:
@@ -252,14 +292,16 @@ class GeradorHTML:
                      f"<td style='text-align:right'>{pct:.1f}%</td>"
                      f"<td style='width:180px'>{bar}</td></tr>")
         return f"""
-  <div class="card">
+  <section class="card" role="region" aria-label="Aging de recebíveis">
     <h2>📅 Aging de Recebíveis — Total: R$ {total:,.2f}</h2>
-    <table><thead><tr>
-      <th>Faixa</th><th style="text-align:right">Qtd</th>
-      <th style="text-align:right">Valor</th>
-      <th style="text-align:right">%</th><th>Distribuição</th>
-    </tr></thead><tbody>{rows}</tbody></table>
-  </div>
+    <table role="table" aria-label="Distribuição do aging por faixa de vencimento">
+      <thead><tr>
+        <th scope="col">Faixa</th><th scope="col" style="text-align:right">Qtd</th>
+        <th scope="col" style="text-align:right">Valor</th>
+        <th scope="col" style="text-align:right">%</th><th scope="col">Distribuição</th>
+      </tr></thead><tbody>{rows}</tbody>
+    </table>
+  </section>
 """
 
     def _secao_dre(self, df: pd.DataFrame) -> str:
@@ -276,11 +318,17 @@ class GeradorHTML:
                      f"<td style='text-align:right;color:{cor}'>R$ {valor:,.2f}</td>"
                      f"<td style='text-align:right;color:#888'>{av}</td></tr>")
         return f"""
-  <div class="card">
+  <section class="card" role="region" aria-label="DRE — Demonstrativo de Resultado">
     <h2>📊 DRE — Demonstrativo de Resultado</h2>
-    <table><thead><tr><th>Linha</th><th style="text-align:right">Valor (R$)</th><th style="text-align:right">AV%</th></tr></thead>
-    <tbody>{rows}</tbody></table>
-  </div>
+    <table role="table" aria-label="Linhas do demonstrativo de resultado">
+      <thead><tr>
+        <th scope="col">Linha</th>
+        <th scope="col" style="text-align:right">Valor (R$)</th>
+        <th scope="col" style="text-align:right">AV%</th>
+      </tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </section>
 """
 
     def _secao_pareto(self, df: pd.DataFrame) -> str:
@@ -300,14 +348,16 @@ class GeradorHTML:
                      f"<td><span style='color:{cor_cls};font-weight:bold'>{classe}</span></td>"
                      f"<td style='width:120px'>{bar}</td></tr>")
         return f"""
-  <div class="card">
+  <section class="card" role="region" aria-label="Análise Pareto — top {min(15,len(df))} entidades">
     <h2>🏆 Análise Pareto — Top {min(15,len(df))} de {len(df)}</h2>
-    <table><thead><tr>
-      <th>#</th><th>{self._esc(col_ent)}</th>
-      <th style="text-align:right">Total R$</th>
-      <th style="text-align:right">%</th>
-      <th style="text-align:right">Acumulado</th>
-      <th>Classe</th><th>Participação</th>
-    </tr></thead><tbody>{rows}</tbody></table>
-  </div>
+    <table role="table" aria-label="Ranking Pareto por entidade">
+      <thead><tr>
+        <th scope="col">#</th><th scope="col">{self._esc(col_ent)}</th>
+        <th scope="col" style="text-align:right">Total R$</th>
+        <th scope="col" style="text-align:right">%</th>
+        <th scope="col" style="text-align:right">Acumulado</th>
+        <th scope="col">Classe</th><th scope="col">Participação</th>
+      </tr></thead><tbody>{rows}</tbody>
+    </table>
+  </section>
 """

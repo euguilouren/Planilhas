@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+pasta_entrada/
+pasta_saida/
+*.html
+*.xlsx
+*.csv
+.git/
+tests/
+*.md
+build/
+dist/
