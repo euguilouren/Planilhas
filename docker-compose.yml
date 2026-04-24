@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # ── Motor autônomo (processa pasta_entrada continuamente) ─────────
   toolkit:
     build: .
     container_name: toolkit-financeiro
@@ -13,7 +14,7 @@ services:
       - ./config.yaml:/app/config.yaml:ro
     command: ["python", "motor_automatico.py", "--intervalo", "10"]
 
-  # Modo one-shot: processa arquivos em pasta_entrada e sai
+  # ── Modo one-shot ─────────────────────────────────────────────────
   toolkit-once:
     build: .
     container_name: toolkit-once
@@ -25,3 +26,68 @@ services:
       - ./pasta_saida:/app/pasta_saida
       - ./config.yaml:/app/config.yaml:ro
     command: ["python", "motor_automatico.py", "--once"]
+
+  # ── API REST (Fase 2) ─────────────────────────────────────────────
+  api:
+    build: .
+    container_name: toolkit-api
+    profiles: ["api"]
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-MUDE_EM_PRODUCAO}
+      - DATABASE_URL=sqlite:////app/pasta_saida/toolkit.db
+      - REDIS_URL=redis://redis:6379/0
+      - PASTA_JOBS=/tmp/toolkit_jobs
+      - EMAIL_SENHA=${EMAIL_SENHA:-}
+    volumes:
+      - ./pasta_saida:/app/pasta_saida
+      - ./config.yaml:/app/config.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Worker Celery ─────────────────────────────────────────────────
+  worker:
+    build: .
+    container_name: toolkit-worker
+    profiles: ["api"]
+    restart: unless-stopped
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-MUDE_EM_PRODUCAO}
+      - DATABASE_URL=sqlite:////app/pasta_saida/toolkit.db
+      - REDIS_URL=redis://redis:6379/0
+      - PASTA_JOBS=/tmp/toolkit_jobs
+    volumes:
+      - ./pasta_saida:/app/pasta_saida
+      - ./config.yaml:/app/config.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "worker.tasks", "worker", "--loglevel=info", "--concurrency=2"]
+
+  # ── Redis (broker Celery + backend de resultados) ─────────────────
+  redis:
+    image: redis:7.4-alpine
+    container_name: toolkit-redis
+    profiles: ["api"]
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
