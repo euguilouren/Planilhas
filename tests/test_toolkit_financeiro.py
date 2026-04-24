@@ -526,3 +526,116 @@ class TestInconsistenciasTemporais:
         assert 'severidade' in r
         assert 'linha' in r
         assert 'coluna' in r
+
+
+# ══════════════════════════════════════════════════════════════════
+# Testes AnalistaFinanceiro.resumo_periodo()
+# ══════════════════════════════════════════════════════════════════
+
+class TestResumoPeriodo:
+
+    @pytest.fixture
+    def df_base(self):
+        return pd.DataFrame({
+            'NF':       ['001', '002', '003', '004'],
+            'Data':     ['15/01/2024', '20/01/2024', '10/02/2024', '25/02/2024'],
+            'Valor':    [5000.0, 3000.0, 8000.0, 2000.0],
+            'Tipo':     ['RECEITA', 'DESPESA', 'RECEITA', 'DESPESA'],
+        })
+
+    def test_resumo_mensal_retorna_dataframe(self, df_base):
+        from toolkit_financeiro import AnalistaFinanceiro
+        result = AnalistaFinanceiro.resumo_periodo(df_base, freq='M')
+        assert isinstance(result, pd.DataFrame)
+        assert 'Receita_RS' in result.columns
+        assert 'Despesa_RS' in result.columns
+        assert 'Resultado_RS' in result.columns
+
+    def test_resumo_mensal_agrupa_por_mes(self, df_base):
+        from toolkit_financeiro import AnalistaFinanceiro
+        result = AnalistaFinanceiro.resumo_periodo(df_base, freq='M')
+        assert len(result) == 2  # jan/2024 e fev/2024
+
+    def test_resumo_mensal_valores_corretos(self, df_base):
+        from toolkit_financeiro import AnalistaFinanceiro
+        result = AnalistaFinanceiro.resumo_periodo(df_base, freq='M')
+        jan = result[result['Periodo'].str.startswith('01')].iloc[0]
+        assert jan['Receita_RS'] == pytest.approx(5000.0)
+        assert jan['Despesa_RS'] == pytest.approx(3000.0)
+        assert jan['Resultado_RS'] == pytest.approx(2000.0)
+
+    def test_resumo_anual_agrupa_por_ano(self, df_base):
+        from toolkit_financeiro import AnalistaFinanceiro
+        result = AnalistaFinanceiro.resumo_periodo(df_base, freq='A')
+        assert len(result) == 1  # só 2024
+        assert result.iloc[0]['Receita_RS'] == pytest.approx(13000.0)
+
+    def test_resumo_sem_col_tipo_usa_fallback_por_valor(self):
+        from toolkit_financeiro import AnalistaFinanceiro
+        df = pd.DataFrame({
+            'NF':   ['001', '002'],
+            'Data': ['15/01/2024', '20/01/2024'],
+            'Valor': [5000.0, -3000.0],
+        })
+        result = AnalistaFinanceiro.resumo_periodo(df, col_tipo='Tipo_Inexistente', freq='M')
+        assert result.iloc[0]['Receita_RS'] == pytest.approx(5000.0)
+        assert result.iloc[0]['Despesa_RS'] == pytest.approx(3000.0)
+
+    def test_resumo_sem_datas_retorna_vazio(self):
+        from toolkit_financeiro import AnalistaFinanceiro
+        df = pd.DataFrame({'NF': ['001'], 'Valor': [100.0], 'Tipo': ['RECEITA']})
+        result = AnalistaFinanceiro.resumo_periodo(df, freq='M')
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 0
+
+
+# ══════════════════════════════════════════════════════════════════
+# Testes Normalizador — inferência de Tipo
+# ══════════════════════════════════════════════════════════════════
+
+class TestNormalizadorTipoInferido:
+
+    def test_tipo_inferido_da_categoria_receita(self):
+        from toolkit_financeiro import Normalizador
+        df = pd.DataFrame({'NF': ['001'], 'Data': ['01/01/2024'],
+                           'Vencimento': ['31/01/2024'], 'Valor': [100.0],
+                           'Categoria': ['RECEITA'], 'Cliente': ['X']})
+        result = Normalizador.para_padrao(df, {
+            'NF': 'NF', 'Data': 'Data', 'Vencimento': 'Vencimento',
+            'Valor': 'Valor', 'Categoria': 'Categoria', 'Cliente': 'Cliente'
+        })
+        assert 'Tipo' in result.columns
+        assert result.iloc[0]['Tipo'] == 'RECEITA'
+
+    def test_tipo_inferido_da_categoria_despesa(self):
+        from toolkit_financeiro import Normalizador
+        df = pd.DataFrame({'NF': ['001'], 'Data': ['01/01/2024'],
+                           'Vencimento': ['31/01/2024'], 'Valor': [200.0],
+                           'Categoria': ['DESPESA OPERACIONAL'], 'Cliente': ['Y']})
+        result = Normalizador.para_padrao(df, {
+            'NF': 'NF', 'Data': 'Data', 'Vencimento': 'Vencimento',
+            'Valor': 'Valor', 'Categoria': 'Categoria', 'Cliente': 'Cliente'
+        })
+        assert result.iloc[0]['Tipo'] == 'DESPESA'
+
+    def test_tipo_fallback_por_sinal_positivo(self):
+        from toolkit_financeiro import Normalizador
+        df = pd.DataFrame({'NF': ['001'], 'Data': ['01/01/2024'],
+                           'Vencimento': ['31/01/2024'], 'Valor': [50.0],
+                           'Categoria': ['OUTRO'], 'Cliente': ['Z']})
+        result = Normalizador.para_padrao(df, {
+            'NF': 'NF', 'Data': 'Data', 'Vencimento': 'Vencimento',
+            'Valor': 'Valor', 'Categoria': 'Categoria', 'Cliente': 'Cliente'
+        })
+        assert result.iloc[0]['Tipo'] == 'RECEITA'
+
+    def test_tipo_fallback_por_sinal_negativo(self):
+        from toolkit_financeiro import Normalizador
+        df = pd.DataFrame({'NF': ['001'], 'Data': ['01/01/2024'],
+                           'Vencimento': ['31/01/2024'], 'Valor': [-100.0],
+                           'Categoria': ['OUTRO'], 'Cliente': ['Z']})
+        result = Normalizador.para_padrao(df, {
+            'NF': 'NF', 'Data': 'Data', 'Vencimento': 'Vencimento',
+            'Valor': 'Valor', 'Categoria': 'Categoria', 'Cliente': 'Cliente'
+        })
+        assert result.iloc[0]['Tipo'] == 'DESPESA'

@@ -38,6 +38,9 @@ class GeradorHTML:
         df_pareto:       pd.DataFrame  = None,
         df_ticket:       pd.DataFrame  = None,
         diagnostico:     dict          = None,
+        df_fluxo_diario: pd.DataFrame  = None,
+        df_fluxo_mensal: pd.DataFrame  = None,
+        df_fluxo_anual:  pd.DataFrame  = None,
     ) -> str:
         """Gera relatório HTML autocontido a partir dos dados processados.
 
@@ -175,6 +178,11 @@ class GeradorHTML:
         # ── Aging ─────────────────────────────────────────────────
         if df_aging is not None and len(df_aging):
             html += self._secao_aging(df_aging)
+
+        # ── Fluxo por Período ─────────────────────────────────────
+        if any(df is not None and len(df) > 0
+               for df in [df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual]):
+            html += self._secao_fluxo(df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual)
 
         # ── DRE ───────────────────────────────────────────────────
         if df_dre is not None and len(df_dre):
@@ -364,5 +372,84 @@ class GeradorHTML:
         <th scope="col">Classe</th><th scope="col">Participação</th>
       </tr></thead><tbody>{rows}</tbody>
     </table>
+  </section>
+"""
+
+    def _secao_fluxo(self, df_d, df_m, df_a) -> str:
+        """Renderiza seção de fluxo de caixa por período (diário/mensal/anual)."""
+        def _tabela(df, label_id):
+            if df is None or len(df) == 0:
+                return f'<p style="color:#6B7280;font-size:13px">Nenhum dado disponível.</p>'
+            tot_rec  = df['Receita_RS'].sum()
+            tot_desp = df['Despesa_RS'].sum()
+            tot_res  = df['Resultado_RS'].sum()
+            rows = ''
+            for _, r in df.iterrows():
+                res = float(r['Resultado_RS'])
+                cor = '#D1FAE5' if res >= 0 else '#FEE2E2'
+                pct = float(r['Resultado_Pct'])
+                pct_str = f'+{pct:.1f}%' if pct >= 0 else f'{pct:.1f}%'
+                rows += (
+                    f"<tr style='background:{cor}'>"
+                    f"<td style='font-weight:600'>{self._esc(str(r['Periodo']))}</td>"
+                    f"<td style='text-align:right;color:#065F46'>R$ {float(r['Receita_RS']):,.2f}</td>"
+                    f"<td style='text-align:center'>{int(r['NFs_Receita'])}</td>"
+                    f"<td style='text-align:right;color:#991B1B'>R$ {float(r['Despesa_RS']):,.2f}</td>"
+                    f"<td style='text-align:center'>{int(r['NFs_Despesa'])}</td>"
+                    f"<td style='text-align:right;font-weight:bold;color:{'#065F46' if res>=0 else '#991B1B'}'>"
+                    f"R$ {res:,.2f}</td>"
+                    f"<td style='text-align:center'>{pct_str}</td></tr>"
+                )
+            cor_tot = '#D1FAE5' if tot_res >= 0 else '#FEE2E2'
+            rows += (
+                f"<tr style='background:{cor_tot};font-weight:bold;border-top:2px solid #1A3556'>"
+                f"<td>TOTAL</td>"
+                f"<td style='text-align:right;color:#065F46'>R$ {tot_rec:,.2f}</td>"
+                f"<td style='text-align:center'>—</td>"
+                f"<td style='text-align:right;color:#991B1B'>R$ {tot_desp:,.2f}</td>"
+                f"<td style='text-align:center'>—</td>"
+                f"<td style='text-align:right;color:{'#065F46' if tot_res>=0 else '#991B1B'}'>"
+                f"R$ {tot_res:,.2f}</td><td></td></tr>"
+            )
+            return f"""<div style="overflow-x:auto">
+<table role="table">
+  <thead><tr>
+    <th scope="col">Período</th>
+    <th scope="col" style="text-align:right">Receitas (R$)</th>
+    <th scope="col" style="text-align:center">NFs Vendidas</th>
+    <th scope="col" style="text-align:right">Despesas (R$)</th>
+    <th scope="col" style="text-align:center">NFs Recebidas</th>
+    <th scope="col" style="text-align:right">Resultado (R$)</th>
+    <th scope="col" style="text-align:center">Resultado %</th>
+  </tr></thead><tbody>{rows}</tbody>
+</table></div>"""
+
+        tab_d = _tabela(df_d, 'diario')
+        tab_m = _tabela(df_m, 'mensal')
+        tab_a = _tabela(df_a, 'anual')
+
+        return f"""
+  <section class="card" role="region" aria-label="Fluxo de Receitas e Despesas por Período">
+    <h2>📅 Fluxo por Período — Receitas × Despesas</h2>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button onclick="(function(){{
+        document.getElementById('tab-fluxo-d').style.display='none';
+        document.getElementById('tab-fluxo-m').style.display='block';
+        document.getElementById('tab-fluxo-a').style.display='none';
+      }})()" style="padding:6px 16px;border:1px solid #1A3556;border-radius:6px;cursor:pointer;background:#fff">Mensal</button>
+      <button onclick="(function(){{
+        document.getElementById('tab-fluxo-d').style.display='block';
+        document.getElementById('tab-fluxo-m').style.display='none';
+        document.getElementById('tab-fluxo-a').style.display='none';
+      }})()" style="padding:6px 16px;border:1px solid #1A3556;border-radius:6px;cursor:pointer;background:#fff">Diário</button>
+      <button onclick="(function(){{
+        document.getElementById('tab-fluxo-d').style.display='none';
+        document.getElementById('tab-fluxo-m').style.display='none';
+        document.getElementById('tab-fluxo-a').style.display='block';
+      }})()" style="padding:6px 16px;border:1px solid #1A3556;border-radius:6px;cursor:pointer;background:#fff">Anual</button>
+    </div>
+    <div id="tab-fluxo-d" style="display:none">{tab_d}</div>
+    <div id="tab-fluxo-m" style="display:block">{tab_m}</div>
+    <div id="tab-fluxo-a" style="display:none">{tab_a}</div>
   </section>
 """

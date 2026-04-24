@@ -898,6 +898,94 @@ class AnalistaFinanceiro:
 
         return pd.DataFrame(indicadores)
 
+    @staticmethod
+    def resumo_periodo(
+        df: pd.DataFrame,
+        col_data: str = 'Data',
+        col_valor: str = 'Valor',
+        col_tipo: str = 'Tipo',
+        col_chave: str = 'NF',
+        freq: str = 'M',
+    ) -> pd.DataFrame:
+        """Agrupa registros por período e por Tipo (RECEITA/DESPESA).
+
+        Args:
+            df: DataFrame no formato padrão.
+            col_data: Nome da coluna de data.
+            col_valor: Nome da coluna de valor.
+            col_tipo: Nome da coluna com RECEITA/DESPESA.
+            col_chave: Nome da coluna de chave (para contagem de NFs).
+            freq: 'D' = diário | 'M' = mensal | 'A' = anual.
+
+        Returns:
+            DataFrame com colunas: Periodo, Receita_RS, NFs_Receita,
+            Despesa_RS, NFs_Despesa, Resultado_RS, Resultado_Pct.
+        """
+        if col_data not in df.columns or col_valor not in df.columns:
+            return pd.DataFrame()
+
+        df = df.copy()
+        df['_data'] = pd.to_datetime(df[col_data], errors='coerce', dayfirst=True)
+        df['_valor'] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
+
+        # Mapear freq='A' para 'YE' (pandas ≥ 2.2 deprecou 'A')
+        _freq_map = {'A': 'YE', 'D': 'D', 'M': 'ME'}
+        _freq = _freq_map.get(freq.upper(), freq)
+
+        # Inferir Tipo se coluna ausente
+        if col_tipo not in df.columns:
+            df['_tipo'] = df['_valor'].apply(lambda v: 'RECEITA' if v >= 0 else 'DESPESA')
+        else:
+            _tipo = df[col_tipo].astype(str).str.upper().str.strip()
+            df['_tipo'] = _tipo.where(_tipo.isin(['RECEITA', 'DESPESA']),
+                                      other=df['_valor'].apply(
+                                          lambda v: 'RECEITA' if v >= 0 else 'DESPESA'))
+
+        df_valid = df.dropna(subset=['_data']).copy()
+        if df_valid.empty:
+            return pd.DataFrame()
+
+        df_valid = df_valid.set_index('_data')
+        chave_col = col_chave if col_chave in df_valid.columns else df_valid.columns[0]
+
+        def _agg(mask, abs_val=False):
+            sub = df_valid[mask].copy()
+            if abs_val:
+                sub['_valor'] = sub['_valor'].abs()
+            g = sub.resample(_freq)
+            soma = g['_valor'].sum().rename('_soma')
+            cont = g[chave_col].count().rename('_cont')
+            return pd.concat([soma, cont], axis=1).fillna(0)
+
+        rec = _agg(df_valid['_tipo'] == 'RECEITA')
+        dep = _agg(df_valid['_tipo'] == 'DESPESA', abs_val=True)
+
+        combined = rec.join(dep, how='outer', lsuffix='_r', rsuffix='_d').fillna(0)
+        combined.index.name = 'Periodo'
+        combined = combined.reset_index()
+
+        # Formatar período
+        fmt_map = {'D': '%d/%m/%Y', 'ME': '%m/%Y', 'YE': '%Y'}
+        fmt = fmt_map.get(_freq, '%m/%Y')
+        combined['Periodo'] = combined['Periodo'].dt.strftime(fmt)
+
+        combined = combined.rename(columns={
+            '_soma_r': 'Receita_RS', '_cont_r': 'NFs_Receita',
+            '_soma_d': 'Despesa_RS', '_cont_d': 'NFs_Despesa',
+        })
+        combined['NFs_Receita'] = combined['NFs_Receita'].astype(int)
+        combined['NFs_Despesa'] = combined['NFs_Despesa'].astype(int)
+        combined['Resultado_RS'] = (combined['Receita_RS'] - combined['Despesa_RS']).round(2)
+        combined['Resultado_Pct'] = combined.apply(
+            lambda r: round(r['Resultado_RS'] / r['Receita_RS'] * 100, 1)
+            if r['Receita_RS'] != 0 else 0.0, axis=1
+        )
+        combined['Receita_RS'] = combined['Receita_RS'].round(2)
+        combined['Despesa_RS'] = combined['Despesa_RS'].round(2)
+
+        return combined[['Periodo', 'Receita_RS', 'NFs_Receita',
+                          'Despesa_RS', 'NFs_Despesa', 'Resultado_RS', 'Resultado_Pct']]
+
 
 # ══════════════════════════════════════════════════════════════════
 # MÓDULO 5: ANÁLISE COMERCIAL
@@ -1721,6 +1809,9 @@ class Normalizador:
          'opcoes': ['RECEITA', 'CMV', 'DESPESA OPERACIONAL',
                     'DESPESA FINANCEIRA', 'IMPOSTO', 'OUTRO'],
          'descricao': 'Categoria do lançamento'},
+        {'nome': 'Tipo',       'tipo': 'lista',  'obrigatorio': False,
+         'opcoes': ['RECEITA', 'DESPESA', 'OUTRO'],
+         'descricao': 'Direção da NF: RECEITA (nota vendida/emitida) ou DESPESA (nota recebida/compra)'},
         {'nome': 'Cliente',    'tipo': 'texto',  'obrigatorio': True,
          'descricao': 'Nome do cliente ou fornecedor'},
         {'nome': 'Status',     'tipo': 'lista',  'obrigatorio': False,
@@ -1795,6 +1886,54 @@ class Normalizador:
         # Preenche Status em branco com PENDENTE
         if preencher_status and 'Status' in df_norm.columns:
             df_norm['Status'] = df_norm['Status'].replace('', 'PENDENTE')
+
+        # Inferência hierárquica da coluna Tipo (RECEITA / DESPESA)
+        # Prioridade 1: coluna Tipo já foi mapeada via COLUNAS_PADRAO → verificar se foi preenchida
+        # Prioridade 2: inferir da Categoria
+        # Prioridade 3: sinal do Valor
+        if 'Tipo' in df_norm.columns:
+            _REC_CATS = r'RECEITA|VENDA|FATURAMENTO|SERVI[ÇC]O|HONOR[ÁA]RIO'
+            _DESP_CATS = r'CMV|CPV|CUSTO|DESPESA|IMPOSTO|DEVOLU[ÇC][ÃA]O'
+            _ENTRADA_VALS = r'\bENTRADA\b|\bCOMPRA\b|\bRECEBIDA\b|\bNF[ _-]?E\b'
+            _SAIDA_VALS = r'\bSA[ÍI]DA\b|\bVENDA\b|\bEMITIDA\b|\bNF[ _-]?S\b'
+
+            tipo_serie = df_norm['Tipo'].astype(str).str.strip().str.upper()
+
+            # Para registros sem Tipo válido, inferir
+            sem_tipo = ~tipo_serie.isin(['RECEITA', 'DESPESA'])
+
+            if sem_tipo.any():
+                # Mapear valores de entrada/saída explícitos para RECEITA/DESPESA
+                tipo_serie = tipo_serie.where(
+                    ~(tipo_serie.str.contains(_SAIDA_VALS, na=False, regex=True) & sem_tipo),
+                    other='RECEITA'
+                )
+                tipo_serie = tipo_serie.where(
+                    ~(tipo_serie.str.contains(_ENTRADA_VALS, na=False, regex=True) & sem_tipo),
+                    other='DESPESA'
+                )
+                sem_tipo = ~tipo_serie.isin(['RECEITA', 'DESPESA'])
+
+            if sem_tipo.any() and 'Categoria' in df_norm.columns:
+                cat = df_norm['Categoria'].astype(str).str.upper()
+                tipo_serie = tipo_serie.where(
+                    ~(cat.str.contains(_REC_CATS, na=False, regex=True) & sem_tipo),
+                    other='RECEITA'
+                )
+                tipo_serie = tipo_serie.where(
+                    ~(cat.str.contains(_DESP_CATS, na=False, regex=True) & sem_tipo),
+                    other='DESPESA'
+                )
+                sem_tipo = ~tipo_serie.isin(['RECEITA', 'DESPESA'])
+
+            if sem_tipo.any() and 'Valor' in df_norm.columns:
+                valores = pd.to_numeric(df_norm['Valor'], errors='coerce').fillna(0)
+                tipo_serie = tipo_serie.where(
+                    ~(sem_tipo),
+                    other=valores.apply(lambda v: 'RECEITA' if v >= 0 else 'DESPESA')
+                )
+
+            df_norm['Tipo'] = tipo_serie.values
 
         logger.info("Normalização: %d registros → formato padrão", len(df_norm))
         return df_norm
@@ -2008,7 +2147,8 @@ class Normalizador:
 
         # ── Aba DADOS ─────────────────────────────────────────────
         headers = Normalizador.NOMES_COLUNAS
-        col_widths = [15, 16, 16, 16, 26, 30, 14, 35]
+        # NF, Data, Vencimento, Valor, Categoria, Tipo, Cliente, Status, Observacao
+        col_widths = [15, 16, 16, 16, 26, 16, 30, 14, 35]
 
         for i, (h, w) in enumerate(zip(headers, col_widths), start=1):
             cel = ws_dados.cell(1, i, h)
