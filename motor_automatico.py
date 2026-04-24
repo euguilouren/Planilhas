@@ -222,10 +222,14 @@ class ProcessadorArquivo:
             resultado['xlsx'] = str(caminho_xlsx)
             logger.info("      Excel: %s", caminho_xlsx)
 
-            # ── Alerta por e-mail ─────────────────────────────────
-            if total_criticos > 0:
-                resultado['status'] = 'ALERTA'
-                self._enviar_email(resultado, df_auditoria)
+            # ── Relatório de ações corretivas ─────────────────────
+            if total_criticos > 0 or len(df_auditoria) > 0:
+                resultado['status'] = 'ALERTA' if total_criticos > 0 else 'AVISO'
+                caminho_acoes = self.pasta_saida / f"acoes_{prefixo}.html"
+                html_acoes = self._gerar_relatorio_acoes(resultado, df_auditoria)
+                caminho_acoes.write_text(html_acoes, encoding='utf-8')
+                resultado['acoes'] = str(caminho_acoes)
+                logger.info("      Ações: %s", caminho_acoes.name)
 
             logger.info("CONCLUÍDO — criticos=%d | html=%s",
                         total_criticos, caminho_html.name)
@@ -349,6 +353,151 @@ class ProcessadorArquivo:
             'obs': f"{len(df_audit)} alertas no total",
         }
         return metricas
+
+    # ── Mapa de soluções por tipo de problema ─────────────────────
+
+    _SOLUCOES = {
+        'DUPLICATA': (
+            "Remover registros duplicados",
+            "Verifique qual linha deve ser mantida e exclua as demais. "
+            "No Excel: Dados → Remover Duplicatas. Confirme antes qual versão "
+            "do registro é a correta (ex.: a mais recente ou a de maior valor).",
+        ),
+        'OUTLIER': (
+            "Verificar valor atípico",
+            "O valor está muito acima ou abaixo da média histórica. "
+            "Confira se houve erro de digitação (ex.: 1.000 digitado como 100.000), "
+            "separador decimal errado ou lançamento em duplicidade com valor somado.",
+        ),
+        'CAMPO_VAZIO': (
+            "Preencher campo obrigatório",
+            "Este campo é obrigatório e não pode ficar em branco. "
+            "Localize a linha indicada, preencha com o valor correto e reimporte o arquivo. "
+            "Sem esta informação o registro não será processado corretamente.",
+        ),
+        'NUMERO_COMO_TEXTO': (
+            "Converter coluna para formato numérico",
+            "A coluna contém números armazenados como texto (geralmente por importação de ERP). "
+            "No Excel: selecione a coluna → clique no aviso amarelo → 'Converter em Número'. "
+            "Ou use a fórmula =VALOR(A1) em uma coluna auxiliar.",
+        ),
+        'DATAS_FORMATO_MISTO': (
+            "Padronizar formato de datas",
+            "A coluna mistura formatos de data (ex.: DD/MM/AAAA e AAAA-MM-DD). "
+            "Padronize todas as datas para DD/MM/AAAA antes de reimportar. "
+            "No Excel: selecione a coluna → Formatar Células → Data → escolha o padrão.",
+        ),
+        'COLUNA_VAZIA': (
+            "Verificar coluna completamente vazia",
+            "Esta coluna não possui nenhum dado. Verifique se o nome da coluna está "
+            "correto no arquivo de origem ou se os dados foram exportados corretamente do sistema.",
+        ),
+        'INCONSISTENCIA_TEMPORAL': (
+            "Corrigir inconsistência de datas",
+            "Há datas fora de ordem ou incoerentes (ex.: vencimento anterior à emissão). "
+            "Revise os campos de Data e Vencimento nas linhas indicadas.",
+        ),
+    }
+
+    _COR_SEV = {
+        'CRÍTICA': ('#FEE2E2', '#991B1B', '🔴'),
+        'ALTA':    ('#FFF0E6', '#7C2D12', '🟠'),
+        'MÉDIA':   ('#FEF3C7', '#92400E', '🟡'),
+        'BAIXA':   ('#D1FAE5', '#065F46', '🟢'),
+    }
+
+    def _gerar_relatorio_acoes(self, resultado: dict, df_audit: pd.DataFrame) -> str:
+        """Gera relatório HTML com problemas encontrados e sugestões de correção."""
+        from datetime import datetime as _dt
+        agora   = _dt.now().strftime('%d/%m/%Y %H:%M')
+        arquivo = Path(resultado['arquivo_origem']).name
+        criticos = resultado['criticos']
+        total    = resultado['total_problemas']
+
+        status_cor = '#C0392B' if criticos > 0 else '#E8A020'
+        status_txt = f"{criticos} problema(s) CRÍTICO(S) — ação imediata necessária" if criticos > 0 else f"{total} aviso(s) — revisar antes de prosseguir"
+
+        itens_html = ''
+        for _, r in df_audit.iterrows():
+            sev   = str(r.get('Severidade', 'MÉDIA'))
+            tipo  = str(r.get('Tipo', ''))
+            col   = str(r.get('Coluna', ''))
+            desc  = str(r.get('Descrição', ''))
+            linha = r.get('Linha', '')
+            if isinstance(linha, list):
+                linha = ', '.join(str(x) for x in linha[:5])
+
+            fundo, texto, emoji = self._COR_SEV.get(sev, ('#FEF3C7', '#92400E', '🟡'))
+            titulo_sol, detalhe_sol = self._SOLUCOES.get(tipo, (
+                "Revisar manualmente",
+                "Verifique o campo indicado e corrija conforme as regras do negócio.",
+            ))
+
+            import html as _html
+            itens_html += f"""
+  <div style="border:1px solid #DDE6F0;border-radius:10px;margin-bottom:16px;overflow:hidden">
+    <div style="background:{fundo};padding:14px 18px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:18px">{emoji}</span>
+      <div style="flex:1">
+        <span style="font-size:11px;font-weight:700;color:{texto};text-transform:uppercase;letter-spacing:.5px">{_html.escape(sev)}</span>
+        <span style="margin:0 8px;color:#9BA8B5">|</span>
+        <span style="font-size:13px;font-weight:600;color:#0D1B2A">{_html.escape(tipo)}</span>
+        {f'<span style="margin:0 8px;color:#9BA8B5">|</span><span style="font-size:12px;color:#4A6080">Coluna: <b>{_html.escape(col)}</b></span>' if col else ''}
+        {f'<span style="margin:0 8px;color:#9BA8B5">|</span><span style="font-size:12px;color:#4A6080">Linha(s): {_html.escape(str(linha))}</span>' if linha else ''}
+      </div>
+    </div>
+    <div style="padding:14px 18px;background:white">
+      <p style="color:#4A6080;font-size:13px;margin-bottom:12px">{_html.escape(desc)}</p>
+      <div style="background:#F5F8FC;border-left:3px solid #1A3556;padding:12px 16px;border-radius:4px">
+        <p style="font-size:11px;font-weight:700;color:#1A3556;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">✅ Como corrigir: {_html.escape(titulo_sol)}</p>
+        <p style="font-size:13px;color:#2C5282;line-height:1.6">{_html.escape(detalhe_sol)}</p>
+      </div>
+    </div>
+  </div>"""
+
+        return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relatório de Ações — {_html.escape(arquivo)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{font-family:'Inter',Arial,sans-serif;background:#EEF2F7;color:#0D1B2A;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}}
+</style>
+</head>
+<body>
+<div style="background:linear-gradient(135deg,#0D1B2A,#1A3556);color:white;padding:22px 36px;display:flex;justify-content:space-between;align-items:center">
+  <div>
+    <div style="font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Toolkit Financeiro</div>
+    <h1 style="font-size:18px;font-weight:700">Relatório de Ações Corretivas</h1>
+  </div>
+  <div style="text-align:right;font-size:11.5px;opacity:.7">
+    Arquivo: {_html.escape(arquivo)}<br>Gerado em: {agora}
+  </div>
+</div>
+
+<div style="max-width:860px;margin:28px auto;padding:0 20px">
+
+  <div style="background:{status_cor};color:white;border-radius:10px;padding:16px 20px;margin-bottom:24px;font-weight:600;font-size:14px">
+    ⚠ {_html.escape(status_txt)}
+  </div>
+
+  {itens_html}
+
+  <div style="background:white;border-radius:10px;padding:20px;border:1px solid #DDE6F0;margin-top:24px">
+    <p style="font-size:12px;color:#9BA8B5">
+      Após corrigir os itens acima, reimporte o arquivo em <code>pasta_entrada/</code> para reprocessamento automático.<br>
+      O relatório completo de auditoria está disponível no arquivo HTML principal gerado junto a este.
+    </p>
+  </div>
+
+</div>
+<div style="text-align:center;font-size:11px;color:#9BA8B5;padding:24px;border-top:1px solid #DDE6F0;margin-top:8px">
+  Toolkit Financeiro &bull; {agora} &bull; <strong>Luan Guilherme Lourenço</strong>
+</div>
+</body></html>"""
 
     def _enviar_email(self, resultado: dict, df_audit: pd.DataFrame):
         cfg_email = self.cfg.get('email', {})
