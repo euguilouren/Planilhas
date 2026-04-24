@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tema White-Label — Toolkit Financeiro",
+  "description": "Personalize cores, logo e nome do produto por tenant.",
+  "type": "object",
+  "properties": {
+    "nome_produto": {
+      "type": "string",
+      "description": "Nome exibido no cabeçalho e título da página",
+      "default": "Toolkit Financeiro"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "URL da logo (PNG/SVG, preferencialmente 200x50px)",
+      "default": ""
+    },
+    "cor_primaria": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$",
+      "description": "Cor principal (hex) — usada em botões e cabeçalhos",
+      "default": "#1F4E79"
+    },
+    "cor_secundaria": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$",
+      "description": "Cor de destaque (hex) — usada em KPI cards positivos",
+      "default": "#1E8449"
+    },
+    "cor_alerta": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$",
+      "description": "Cor de alerta (hex) — usada em KPI cards negativos",
+      "default": "#C0392B"
+    },
+    "rodape": {
+      "type": "string",
+      "description": "Texto do rodapé dos relatórios gerados",
+      "default": "Gerado por Toolkit Financeiro"
+    },
+    "idioma_padrao": {
+      "type": "string",
+      "enum": ["pt_BR", "en_US", "es_ES"],
+      "description": "Idioma padrão da interface",
+      "default": "pt_BR"
+    },
+    "ocultar_branding": {
+      "type": "boolean",
+      "description": "Se true, remove referências ao Toolkit Financeiro original",
+      "default": false
+    }
+  },
+  "required": ["nome_produto", "cor_primaria"],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "nome_produto": "FinSuite Pro",
+      "logo_url": "https://cdn.empresa.com/logo.png",
+      "cor_primaria": "#0D47A1",
+      "cor_secundaria": "#2E7D32",
+      "cor_alerta": "#B71C1C",
+      "rodape": "FinSuite Pro — Análise Financeira Inteligente",
+      "idioma_padrao": "pt_BR",
+      "ocultar_branding": true
+    }
+  ]
+}
