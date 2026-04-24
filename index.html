@@ -26,9 +26,10 @@ const PADROES_COLUNAS = {
   valor:      /valor|total|amount|price|preco|receita|despesa|saldo|liquido|bruto|montante/i,
   data:       /^(data|date|emiss[aã]o|lan[cç]amento|compet[eê]ncia|registro)/i,
   vencimento: /vencimento|vencto|due|prazo|venc\b/i,
-  categoria:  /categoria|category|tipo|type|natureza|hist[oó]rico|descri[cç][aã]o|conta\b/i,
+  categoria:  /categoria|category|natureza|hist[oó]rico|descri[cç][aã]o|conta\b/i,
   entidade:   /cliente|fornecedor|customer|supplier|nome|name|empresa|parceiro|favorecido/i,
   chave:      /^(nf|nfe|numero|n[uú]mero|id\b|doc|documento|chave|key|c[oó]digo|pedido)/i,
+  tipo:       /^(tipo|type|natureza|dire[cç][aã]o|entrada[\s_-]sa[ií]da|nf[\s_-]tipo)/i,
 };
 
 function detectarColunas(headers) {
@@ -310,22 +311,156 @@ function construirDRE(dados, colCat, colValor) {
 // ══════════════════════════════════════════════════════
 
 function calcularKPIs(dados, cols) {
-  const valores = dados.map(r => toNum(r[cols.valor])).filter(n => !isNaN(n));
-  const datas   = cols.data ? dados.map(r => toDate(r[cols.data])).filter(Boolean) : [];
-  const total   = valores.reduce((a,b)=>a+b, 0);
-  const ticket  = valores.length ? total / valores.length : 0;
+  const colVal  = cols.valor  || 'Valor';
+  const colTipo = cols.tipo   || 'Tipo';
+  const colData = cols.data   || 'Data';
+
+  const datas = dados.map(r => toDate(r[colData])).filter(Boolean);
   const minData = datas.length ? new Date(Math.min(...datas)) : null;
   const maxData = datas.length ? new Date(Math.max(...datas)) : null;
 
+  let receita = 0, despesa = 0, nfRec = 0, nfDesp = 0;
+  dados.forEach(r => {
+    const v    = toNum(r[colVal]);
+    if (isNaN(v)) return;
+    const tipo = String(r[colTipo] || r['Tipo'] || '').trim().toUpperCase();
+    if (tipo === 'RECEITA') { receita += v; nfRec++; }
+    else if (tipo === 'DESPESA') { despesa += v; nfDesp++; }
+    else if (v >= 0) { receita += v; nfRec++; }
+    else { despesa += Math.abs(v); nfDesp++; }
+  });
+  const resultado = receita - despesa;
+  const margem    = receita !== 0 ? resultado / receita * 100 : 0;
+  const ticket    = nfRec   ? receita / nfRec : 0;
+
   return {
     totalRegistros: dados.length,
-    totalValor:     total,
-    ticketMedio:    ticket,
+    totalValor:     receita + despesa,
+    receita, despesa, resultado, margem, ticket,
+    nfRec, nfDesp,
     periodoInicio:  minData,
     periodoFim:     maxData,
     colsDetectadas: Object.values(cols).filter(Boolean).length,
   };
 }
+
+// ══════════════════════════════════════════════════════
+// MÓDULO: FLUXO POR PERÍODO
+// ══════════════════════════════════════════════════════
+
+function calcularFluxoPeriodo(dados, colData, colValor, colTipo, freq) {
+  // freq: 'D' dia | 'M' mês | 'A' ano
+  const grupos = {};
+  dados.forEach(r => {
+    const d = toDate(r[colData]);
+    if (!d || isNaN(d)) return;
+    let key;
+    if (freq === 'D') key = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    else if (freq === 'A') key = String(d.getFullYear());
+    else key = `${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+
+    if (!grupos[key]) grupos[key] = { rec:0, desp:0, nfRec:0, nfDesp:0 };
+    const v    = toNum(r[colValor]);
+    if (isNaN(v)) return;
+    const tipo = String(r[colTipo] || r['Tipo'] || '').trim().toUpperCase();
+    const isRec = tipo === 'RECEITA' || (tipo !== 'DESPESA' && v >= 0);
+    if (isRec) { grupos[key].rec += v;  grupos[key].nfRec++; }
+    else       { grupos[key].desp += Math.abs(v); grupos[key].nfDesp++; }
+  });
+
+  return Object.entries(grupos)
+    .sort((a,b) => {
+      // Ordena por data: converte key para valor comparável
+      const parse = k => {
+        if (freq==='A') return new Date(k+'-01-01');
+        const p = k.split('/');
+        if (freq==='D') return new Date(+p[2],+p[1]-1,+p[0]);
+        return new Date(+p[1],+p[0]-1,1);
+      };
+      return parse(a[0]) - parse(b[0]);
+    })
+    .map(([periodo, g]) => ({
+      periodo,
+      receita:    Math.round(g.rec  * 100) / 100,
+      despesa:    Math.round(g.desp * 100) / 100,
+      resultado:  Math.round((g.rec - g.desp) * 100) / 100,
+      nfRec:  g.nfRec,
+      nfDesp: g.nfDesp,
+      pct: g.rec !== 0 ? Math.round((g.rec - g.desp) / g.rec * 1000) / 10 : 0,
+    }));
+}
+
+function renderFluxoPeriodo(dados, cols) {
+  const el = document.getElementById('fluxo-content');
+  if (!el) return;
+  const colData  = cols.data   || 'Data';
+  const colValor = cols.valor  || 'Valor';
+  const colTipo  = cols.tipo   || 'Tipo';
+
+  function _tabela(freq) {
+    const linhas = calcularFluxoPeriodo(dados, colData, colValor, colTipo, freq);
+    if (!linhas.length) return '<p style="color:#6B7280;padding:8px 0;font-size:12px">Sem dados de data para calcular.</p>';
+    const totRec  = linhas.reduce((a,r)=>a+r.receita, 0);
+    const totDesp = linhas.reduce((a,r)=>a+r.despesa, 0);
+    const totRes  = totRec - totDesp;
+    const rows = linhas.map(r => {
+      const cor = r.resultado >= 0 ? '#D1FAE5' : '#FEE2E2';
+      const corR = r.resultado >= 0 ? 'var(--success)' : 'var(--danger)';
+      const pctStr = (r.pct >= 0 ? '+' : '') + r.pct.toFixed(1) + '%';
+      return `<tr style="background:${cor}">
+        <td style="font-weight:600">${esc(r.periodo)}</td>
+        <td style="text-align:right;color:var(--success)">${fmtBRL(r.receita)}</td>
+        <td style="text-align:center">${r.nfRec}</td>
+        <td style="text-align:right;color:var(--danger)">${fmtBRL(r.despesa)}</td>
+        <td style="text-align:center">${r.nfDesp}</td>
+        <td style="text-align:right;font-weight:bold;color:${corR}">${fmtBRL(r.resultado)}</td>
+        <td style="text-align:center">${pctStr}</td></tr>`;
+    }).join('');
+    const corTot = totRes >= 0 ? '#D1FAE5' : '#FEE2E2';
+    const corRTot = totRes >= 0 ? 'var(--success)' : 'var(--danger)';
+    const totRow = `<tr style="background:${corTot};font-weight:bold;border-top:2px solid var(--navy-2)">
+      <td>TOTAL</td>
+      <td style="text-align:right;color:var(--success)">${fmtBRL(totRec)}</td>
+      <td style="text-align:center">—</td>
+      <td style="text-align:right;color:var(--danger)">${fmtBRL(totDesp)}</td>
+      <td style="text-align:center">—</td>
+      <td style="text-align:right;color:${corRTot}">${fmtBRL(totRes)}</td>
+      <td></td></tr>`;
+    return `<div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>Período</th><th style="text-align:right">Receitas</th>
+        <th style="text-align:center">NFs Vend.</th>
+        <th style="text-align:right">Despesas</th>
+        <th style="text-align:center">NFs Rec.</th>
+        <th style="text-align:right">Resultado</th>
+        <th style="text-align:center">Margem%</th>
+      </tr></thead><tbody>${rows}${totRow}</tbody></table></div>`;
+  }
+
+  const tabD = _tabela('D');
+  const tabM = _tabela('M');
+  const tabA = _tabela('A');
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn-sm btn-outline fluxo-tab active" onclick="switchFluxo('M',this)"
+        style="font-weight:bold">Mensal</button>
+      <button class="btn-sm btn-outline fluxo-tab" onclick="switchFluxo('D',this)">Diário</button>
+      <button class="btn-sm btn-outline fluxo-tab" onclick="switchFluxo('A',this)">Anual</button>
+    </div>
+    <div id="fluxo-d" style="display:none">${tabD}</div>
+    <div id="fluxo-m" style="display:block">${tabM}</div>
+    <div id="fluxo-a" style="display:none">${tabA}</div>`;
+}
+
+// ── switch de tab fluxo ─
+window.switchFluxo = function(id, btn) {
+  ['D','M','A'].forEach(t => {
+    const el = document.getElementById('fluxo-'+t.toLowerCase());
+    if (el) el.style.display = (t === id) ? 'block' : 'none';
+  });
+  document.querySelectorAll('.fluxo-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+};
 
 // Exportar para uso no app.js
 // (module.exports removido para uso direto no navegador)
@@ -417,7 +552,7 @@ body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:var(--bg);
 /* Dashboard */
 #dashboard{display:none;max-width:1240px;margin:0 auto;padding:20px}
 /* KPIs */
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:20px}
 .kpi{background:var(--surface);border-radius:var(--radius);padding:20px 22px;
   box-shadow:var(--shadow-sm);border:1px solid var(--border);border-left:3px solid var(--navy-3);
   position:relative;overflow:hidden;transition:box-shadow .2s,transform .2s}
@@ -609,6 +744,12 @@ tr:hover td{background:#F7FAFD}
     <div class="card"><h2>📈 Aging — Distribuição</h2><div class="chart-box"><canvas id="chart-aging"></canvas></div></div>
   </div>
 
+  <!-- Fluxo por Período -->
+  <div class="card">
+    <h2>💰 Fluxo por Período — Receitas × Despesas</h2>
+    <div id="fluxo-content"><div class="empty">Carregue uma planilha para ver o fluxo por período.</div></div>
+  </div>
+
   <!-- Auditoria -->
   <div class="card" id="card-auditoria">
     <h2>🔍 Auditoria de Dados <span id="badge-auditoria"></span></h2>
@@ -660,6 +801,8 @@ const COLUNAS_PADRAO = [
   { nome:'Valor',      tipo:'moeda', obrigatorio:true  },
   { nome:'Categoria',  tipo:'lista', obrigatorio:true,
     opcoes:['RECEITA','CMV','DESPESA OPERACIONAL','DESPESA FINANCEIRA','IMPOSTO','OUTRO'] },
+  { nome:'Tipo',       tipo:'lista', obrigatorio:false,
+    opcoes:['RECEITA','DESPESA','OUTRO'] },
   { nome:'Cliente',    tipo:'texto', obrigatorio:true  },
   { nome:'Status',     tipo:'lista', obrigatorio:false,
     opcoes:['PAGO','PENDENTE','ATRASADO','CANCELADO'] },
@@ -715,6 +858,22 @@ function normalizarParaPadrao(dados, mapeamento) {
       if (col.nome === 'Status' && val === '') val = 'PENDENTE';
       out[col.nome] = val;
     });
+
+    // Inferência hierárquica de Tipo (RECEITA / DESPESA)
+    if (!out['Tipo'] || !['RECEITA','DESPESA'].includes(out['Tipo'])) {
+      const _REC_CAT  = /RECEITA|VENDA|FATURAMENTO|SERVI[ÇC]O|HONOR[ÁA]RIO/i;
+      const _DESP_CAT = /CMV|CPV|CUSTO|DESPESA|IMPOSTO|DEVOLU/i;
+      const _SAIDA_V  = /\bSA[ÍI]DA\b|\bVENDA\b|\bEMITIDA\b|\bNF[\s_-]?S\b/i;
+      const _ENTR_V   = /\bENTRADA\b|\bCOMPRA\b|\bRECEBIDA\b|\bNF[\s_-]?E\b/i;
+      const tipoRaw   = String(row[mapeamento['Tipo']] ?? '').trim().toUpperCase();
+
+      if (_SAIDA_V.test(tipoRaw))       out['Tipo'] = 'RECEITA';
+      else if (_ENTR_V.test(tipoRaw))   out['Tipo'] = 'DESPESA';
+      else if (_REC_CAT.test(String(out['Categoria']||'')))  out['Tipo'] = 'RECEITA';
+      else if (_DESP_CAT.test(String(out['Categoria']||''))) out['Tipo'] = 'DESPESA';
+      else out['Tipo'] = (out['Valor'] >= 0) ? 'RECEITA' : 'DESPESA';
+    }
+
     return out;
   });
 }
@@ -930,6 +1089,7 @@ function mostrarConfigColunas(headers, cols) {
     'Vencimento': autoMatch(PADROES_COLUNAS.vencimento),
     'Valor':      autoMatch(PADROES_COLUNAS.valor),
     'Categoria':  autoMatch(PADROES_COLUNAS.categoria),
+    'Tipo':       autoMatch(PADROES_COLUNAS.tipo),
     'Cliente':    autoMatch(PADROES_COLUNAS.entidade),
     'Status':     null,
     'Observacao': null,
@@ -964,6 +1124,7 @@ function lerColsSelecionadas() {
     categoria:  document.getElementById('sel-categoria')?.value  || null,
     entidade:   document.getElementById('sel-cliente')?.value    || null,
     chave:      document.getElementById('sel-nf')?.value         || null,
+    tipo:       document.getElementById('sel-tipo')?.value       || null,
   };
 }
 
@@ -979,7 +1140,7 @@ function executarAnalise() {
         dados = _dadosNormalizados;
         _headers = COLUNAS_PADRAO.map(c => c.nome);
         _cols = { valor:'Valor', data:'Data', vencimento:'Vencimento',
-                  categoria:'Categoria', entidade:'Cliente', chave:'NF' };
+                  categoria:'Categoria', entidade:'Cliente', chave:'NF', tipo:'Tipo' };
       } else {
         _cols = lerColsSelecionadas();
         dados = _dadosOriginais;
@@ -1005,6 +1166,9 @@ function executarAnalise() {
       const par = calcularPareto(dados, _cols.entidade, _cols.valor);
       renderPareto(par);
 
+      // Fluxo por Período
+      renderFluxoPeriodo(dados, _cols);
+
       // Tabela de dados
       renderTabela(dados, _headers);
 
@@ -1026,19 +1190,33 @@ function executarAnalise() {
 function renderKPIs(k) {
   const periodo = (k.periodoInicio && k.periodoFim)
     ? `${fmtData(k.periodoInicio)} → ${fmtData(k.periodoFim)}` : '—';
+  const corRes = k.resultado >= 0 ? 'var(--success)' : 'var(--danger)';
+  const margem = k.margem.toFixed(1);
   document.getElementById('kpis').innerHTML = `
-    <div class="kpi"><div class="lbl">Total de Registros</div>
+    <div class="kpi ok">
+      <div class="lbl">Receitas</div>
+      <div class="val ok" style="font-size:18px">${fmtBRL(k.receita)}</div>
+      <div class="sub">${k.nfRec} NFs vendidas</div></div>
+    <div class="kpi critico">
+      <div class="lbl">Despesas</div>
+      <div class="val critico" style="font-size:18px">${fmtBRL(k.despesa)}</div>
+      <div class="sub">${k.nfDesp} NFs recebidas</div></div>
+    <div class="kpi gold">
+      <div class="lbl">Resultado Líquido</div>
+      <div class="val" style="font-size:18px;color:${corRes}">${fmtBRL(k.resultado)}</div>
+      <div class="sub">Margem: ${margem}%</div></div>
+    <div class="kpi">
+      <div class="lbl">Ticket Médio (Rec.)</div>
+      <div class="val" style="font-size:18px">${fmtBRL(k.ticket)}</div>
+      <div class="sub">por NF de receita</div></div>
+    <div class="kpi">
+      <div class="lbl">Total de Registros</div>
       <div class="val">${fmtNum(k.totalRegistros)}</div>
       <div class="sub">${periodo}</div></div>
-    <div class="kpi"><div class="lbl">Total Geral</div>
-      <div class="val" style="font-size:18px">${fmtBRL(k.totalValor)}</div>
-      <div class="sub">soma de ${_cols.valor||'—'}</div></div>
-    <div class="kpi"><div class="lbl">Ticket Médio</div>
-      <div class="val" style="font-size:18px">${fmtBRL(k.ticketMedio)}</div>
-      <div class="sub">por registro</div></div>
-    <div class="kpi"><div class="lbl">Colunas Detectadas</div>
+    <div class="kpi">
+      <div class="lbl">Colunas Detectadas</div>
       <div class="val ok">${k.colsDetectadas}</div>
-      <div class="sub">de 6 configuradas</div></div>`;
+      <div class="sub">mapeadas</div></div>`;
 }
 
 // ══════════════════════════════════════════════════════

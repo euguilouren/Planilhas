@@ -32,6 +32,7 @@ from toolkit_financeiro import (
     Normalizador,
 )
 from relatorio_html import GeradorHTML
+from dashboard_visual import GeradorDashboard
 
 # ── Logging ───────────────────────────────────────────────────────
 logging.basicConfig(
@@ -236,6 +237,13 @@ class ProcessadorArquivo:
             df_pareto = self._calcular_pareto(df, col_ent, col_val)
             df_ticket = self._calcular_ticket(df, col_val, col_ent)
 
+            # Resumos por período (diário/mensal/anual)
+            df_fluxo_d = AnalistaFinanceiro.resumo_periodo(df, freq='D')
+            df_fluxo_m = AnalistaFinanceiro.resumo_periodo(df, freq='M')
+            df_fluxo_a = AnalistaFinanceiro.resumo_periodo(df, freq='A')
+            logger.info("      Fluxo: %d dias | %d meses | %d anos",
+                        len(df_fluxo_d), len(df_fluxo_m), len(df_fluxo_a))
+
             # ── 4. Relatório HTML ─────────────────────────────────
             logger.info("[4/5] Gerando HTML...")
             html = self.gerador.gerar(
@@ -247,11 +255,31 @@ class ProcessadorArquivo:
                 df_pareto=df_pareto,
                 df_ticket=df_ticket,
                 diagnostico=diagnostico,
+                df_fluxo_diario=df_fluxo_d,
+                df_fluxo_mensal=df_fluxo_m,
+                df_fluxo_anual=df_fluxo_a,
             )
             caminho_html = self.pasta_saida / f"relatorio_{prefixo}.html"
             caminho_html.write_text(html, encoding='utf-8')
             resultado['html'] = str(caminho_html)
             logger.info("      HTML: %s", caminho_html)
+
+            # Dashboard autônomo
+            dash_html = GeradorDashboard.gerar(
+                arquivo_origem=Path(caminho_arquivo).name,
+                df_dados=df,
+                df_fluxo_mensal=df_fluxo_m,
+                df_fluxo_diario=df_fluxo_d,
+                df_fluxo_anual=df_fluxo_a,
+                df_dre=df_dre,
+                df_pareto=df_pareto,
+                total_criticos=total_criticos,
+                config=self.cfg,
+            )
+            caminho_dash = self.pasta_saida / f"dashboard_{prefixo}.html"
+            caminho_dash.write_text(dash_html, encoding='utf-8')
+            resultado['dashboard'] = str(caminho_dash)
+            logger.info("      Dashboard: %s", caminho_dash.name)
 
             # ── 5. Excel formatado ────────────────────────────────
             logger.info("[5/5] Gerando Excel...")
