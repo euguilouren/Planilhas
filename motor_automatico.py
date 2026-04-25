@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 # CARREGAMENTO DE CONFIGURAÇÃO
 # ══════════════════════════════════════════════════════════════════
 
+
 def carregar_config(caminho: str = 'config.yaml') -> dict:
     if not os.path.exists(caminho):
         logger.warning("config.yaml não encontrado — usando configuração padrão")
@@ -66,6 +67,84 @@ def carregar_config(caminho: str = 'config.yaml') -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════
+# INTEGRAÇÃO CLAUDE API
+# ══════════════════════════════════════════════════════════════════
+
+class AnalisadorClaudeAPI:
+    """Envia briefing ao Claude API e retorna análise textual."""
+
+    def __init__(self, cfg: dict):
+        self.cfg_api = cfg.get('claude_api', {})
+        self.ativo   = self.cfg_api.get('ativo', False)
+        self.modelo  = self.cfg_api.get('modelo', 'claude-opus-4-5')
+        self.max_tok = self.cfg_api.get('max_tokens', 1024)
+        self._client = None
+        self._system_prompt = ''
+
+        if not self.ativo:
+            return
+
+        api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+        if not api_key:
+            logger.warning(
+                "claude_api.ativo=true mas ANTHROPIC_API_KEY não definida"
+                " — análise Claude desabilitada."
+            )
+            self.ativo = False
+            return
+
+        try:
+            import anthropic as _anthropic
+            self._client = _anthropic.Anthropic(api_key=api_key)
+        except ImportError:
+            logger.warning(
+                "Pacote 'anthropic' não instalado (pip install anthropic)"
+                " — análise Claude desabilitada."
+            )
+            self.ativo = False
+            return
+
+        prompt_path = self.cfg_api.get('prompt_sistema', 'prompt_sistema.md')
+        try:
+            with open(prompt_path, encoding='utf-8') as f:
+                self._system_prompt = f.read()
+        except OSError as e:
+            logger.warning("Não foi possível ler '%s': %s — usando prompt padrão.", prompt_path, e)
+            self._system_prompt = (
+                "Você é um analista financeiro sênior. Analise o briefing e indique "
+                "os pontos críticos, diagnóstico e ações recomendadas."
+            )
+
+    def analisar(self, briefing: str) -> str:
+        """Envia briefing ao Claude e retorna análise. Retorna '' se inativo ou erro."""
+        if not self.ativo or self._client is None:
+            return ''
+
+        import anthropic as _anthropic
+        try:
+            resposta = self._client.messages.create(
+                model=self.modelo,
+                max_tokens=self.max_tok,
+                system=[{
+                    "type": "text",
+                    "text": self._system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+                messages=[{"role": "user", "content": briefing}],
+            )
+            return resposta.content[0].text
+        except _anthropic.AuthenticationError as e:
+            logger.error("Claude API: chave inválida — %s", e)
+        except _anthropic.RateLimitError as e:
+            logger.warning("Claude API: rate limit atingido — %s", e)
+        except _anthropic.APIConnectionError as e:
+            logger.warning("Claude API: falha de conexão — %s", e)
+        except _anthropic.APIError as e:
+            logger.warning("Claude API: erro inesperado — %s", e)
+        return ''
+
+
+# ══════════════════════════════════════════════════════════════════
 # PROCESSADOR PRINCIPAL
 # ══════════════════════════════════════════════════════════════════
 
@@ -80,6 +159,7 @@ class ProcessadorArquivo:
         self.gerador  = GeradorHTML(config)
         self.pasta_saida = Path(config.get('pastas', {}).get('saida', 'pasta_saida'))
         self.pasta_saida.mkdir(parents=True, exist_ok=True)
+        self.analisador_claude = AnalisadorClaudeAPI(config)
 
         # Configurar logging para arquivo (guardamos referência para fechar depois)
         log_path = config.get('pastas', {}).get('log', str(self.pasta_saida / 'log.txt'))
@@ -140,6 +220,7 @@ class ProcessadorArquivo:
             'timestamp':       timestamp,
             'html':            None,
             'xlsx':            None,
+            'analise':         None,
             'criticos':        0,
             'total_problemas': 0,
             'status':          'OK',
@@ -322,6 +403,23 @@ class ProcessadorArquivo:
                 caminho_acoes.write_text(html_acoes, encoding='utf-8')
                 resultado['acoes'] = str(caminho_acoes)
                 logger.info("      Ações: %s", caminho_acoes.name)
+
+            # ── 6. Análise Claude API ─────────────────────────────
+            if self.analisador_claude.ativo:
+                logger.info("[6/6] Enviando briefing ao Claude API...")
+                briefing = self._gerar_briefing(
+                    df, diagnostico, df_auditoria, df_dre, df_aging, df_pareto, df_ticket
+                )
+                analise = self.analisador_claude.analisar(briefing)
+                if analise:
+                    caminho_analise = self.pasta_saida / f"analise_{prefixo}.txt"
+                    caminho_analise.write_text(analise, encoding='utf-8')
+                    resultado['analise'] = str(caminho_analise)
+                    logger.info("      Análise Claude: %s", caminho_analise)
+
+            # ── Alerta por e-mail ─────────────────────────────────
+            if total_criticos > 0:
+                self._enviar_email(resultado, df_auditoria)
 
             logger.info("CONCLUÍDO — criticos=%d | html=%s",
                         total_criticos, caminho_html.name)
@@ -591,6 +689,69 @@ class ProcessadorArquivo:
 </div>
 </body></html>"""
 
+    def _gerar_briefing(self, df, diagnostico, df_auditoria, df_dre,
+                        df_aging, df_pareto, df_ticket) -> str:
+        """Gera texto compacto com os achados principais para envio ao Claude API."""
+        linhas = [
+            f"# BRIEFING FINANCEIRO — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+            f"Arquivo: {diagnostico['arquivo']}",
+            f"Total de registros: {diagnostico['total_registros']:,}",
+            "",
+        ]
+        if diagnostico.get('problemas_formato'):
+            linhas.append(f"## Problemas de formato ({len(diagnostico['problemas_formato'])})")
+            for p in diagnostico['problemas_formato']:
+                linhas.append(f"- [{p['severidade']}] {p['descricao']}")
+            linhas.append("")
+        if len(df_auditoria):
+            linhas.append(f"## Auditoria — {len(df_auditoria)} problemas encontrados")
+            for sev in [Status.CRITICA, Status.ALTA, Status.MEDIA, Status.BAIXA]:
+                subset = df_auditoria[df_auditoria['Severidade'] == sev]
+                if len(subset):
+                    linhas.append(f"\n### {sev} ({len(subset)})")
+                    for _, row in subset.head(10).iterrows():
+                        linhas.append(f"- Linha {row.get('Linha','?')} | {row.get('Coluna','?')} | {row.get('Descrição','')}")
+            linhas.append("")
+        if df_dre is not None and len(df_dre):
+            linhas.append("## DRE Resumido")
+            for _, row in df_dre.iterrows():
+                av = f" ({row['AV_%']:.1f}%)" if 'AV_%' in row and pd.notna(row.get('AV_%')) else ""
+                linhas.append(f"  {row['Linha_DRE']:<40} R$ {row['Valor_RS']:>15,.2f}{av}")
+            linhas.append("")
+        if df_aging is not None and len(df_aging):
+            linhas.append("## Aging de Recebíveis")
+            for _, row in df_aging.iterrows():
+                linhas.append(
+                    f"  {row['Faixa_Aging']:<25} {row['Quantidade']:>5} itens"
+                    f"  R$ {row['Total_RS']:>12,.2f}  ({row.get('Percentual',0):.1f}%)"
+                )
+            linhas.append("")
+        if df_pareto is not None and len(df_pareto):
+            linhas.append("## Top 5 por Faturamento (Pareto)")
+            col_entidade = df_pareto.columns[0]
+            for _, row in df_pareto.head(5).iterrows():
+                linhas.append(
+                    f"  #{int(row['Ranking'])} {str(row[col_entidade]):<30}"
+                    f"  R$ {row['Total_RS']:>12,.2f}  ({row['Percentual']:.1f}%)"
+                )
+            linhas.append("")
+        if df_ticket is not None and len(df_ticket) and 'Ticket_Medio_RS' in df_ticket.columns:
+            linhas.append("## Ticket Médio")
+            for _, row in df_ticket.head(5).iterrows():
+                linhas.append(
+                    f"  Ticket médio: R$ {row['Ticket_Medio_RS']:,.2f}"
+                    f" | {int(row.get('Transações', 0))} transações"
+                )
+            linhas.append("")
+        linhas += [
+            "---",
+            "Analise os dados acima e indique:",
+            "1. Quais inconsistências são mais críticas?",
+            "2. O que o DRE indica sobre a saúde financeira?",
+            "3. Quais ações recomenda com base no aging?",
+        ]
+        return '\n'.join(linhas)
+
     def _enviar_email(self, resultado: dict, df_audit: pd.DataFrame):
         cfg_email = self.cfg.get('email', {})
         if not cfg_email.get('ativo', False):
@@ -740,8 +901,10 @@ def main():
     if args.arquivo:
         # Modo: arquivo específico
         resultado = processador.processar(args.arquivo)
-        logger.info("HTML:  %s", resultado['html'])
-        logger.info("Excel: %s", resultado['xlsx'])
+        logger.info("HTML:    %s", resultado['html'])
+        logger.info("Excel:   %s", resultado['xlsx'])
+        if resultado.get('analise'):
+            logger.info("Análise: %s", resultado['analise'])
         logger.info("Críticos: %d | Total alertas: %d", resultado['criticos'], resultado['total_problemas'])
 
     elif args.once:

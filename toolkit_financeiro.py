@@ -1878,7 +1878,7 @@ class Normalizador:
                 serie = serie.where(serie.isin(opcoes + ['']), other='')
 
             else:  # texto
-                serie = serie.astype(str).str.strip()
+                serie = serie.fillna('').astype(str).str.strip()
                 serie = serie.replace({'nan': '', 'None': '', 'NaT': ''})
 
             df_norm[nome] = serie.values

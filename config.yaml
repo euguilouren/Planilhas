@@ -79,6 +79,14 @@ email:
     - "CRÍTICA"
     - "ALTA"
 
+# Integração Claude API (análise automática de briefings)
+claude_api:
+  ativo: false                          # true para habilitar análise automática
+  modelo: "claude-opus-4-5"
+  max_tokens: 1024
+  prompt_sistema: "prompt_sistema.md"   # caminho relativo ao arquivo de sistema
+# Chave da API: variável de ambiente ANTHROPIC_API_KEY (nunca no config)
+
 # Configurações do relatório HTML
 relatorio:
   titulo:  "Relatório de Análise Financeira"
