@@ -81,7 +81,7 @@ email:
 
 # Integração Claude API (análise automática de briefings)
 claude_api:
-  ativo: false                          # true para habilitar análise automática
+  ativo: true                           # true para habilitar análise automática
   modelo: "claude-opus-4-5"
   max_tokens: 1024
   prompt_sistema: "prompt_sistema.md"   # caminho relativo ao arquivo de sistema
