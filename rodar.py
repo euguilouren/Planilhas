@@ -11,8 +11,15 @@ COMO USAR
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
+
+try:
+    import yaml as _yaml
+    _YAML_OK = True
+except ImportError:
+    _YAML_OK = False
 
 from toolkit_financeiro import (
     Leitor, Auditor, Conciliador, AnalistaFinanceiro,
@@ -27,23 +34,40 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ── Carregar config.yaml se disponível ──────────────────────────
+def _carregar_config() -> dict:
+    cfg_path = Path(__file__).with_name('config.yaml')
+    if _YAML_OK and cfg_path.exists():
+        try:
+            with open(cfg_path, encoding='utf-8') as f:
+                cfg = _yaml.safe_load(f) or {}
+            logger.info("Configuração carregada de config.yaml")
+            return cfg
+        except Exception as e:
+            logger.warning("Não foi possível ler config.yaml: %s — usando defaults", e)
+    return {}
+
+_CFG = _carregar_config()
+_COLS_CFG = _CFG.get('colunas', {})
+_AUD_CFG  = _CFG.get('auditoria', {})
+
 # ══════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO — edite aqui
+# CONFIGURAÇÃO — edite aqui (ou deixe config.yaml controlar)
 # ══════════════════════════════════════════════════════════════════
 
-ARQUIVO_ENTRADA = "minha_planilha.xlsx"   # nome do seu arquivo
-ARQUIVO_SAIDA   = "resultado.xlsx"        # nome do arquivo de saída
-ARQUIVO_BRIEFING = "briefing.txt"         # resumo para colar no Claude
+ARQUIVO_ENTRADA  = "minha_planilha.xlsx"   # nome do seu arquivo
+ARQUIVO_SAIDA    = "resultado.xlsx"        # nome do arquivo de saída
+ARQUIVO_BRIEFING = "briefing.txt"          # resumo para colar no Claude
 
-# Nomes das colunas do SEU arquivo (ajuste conforme necessário)
-COL_VALOR       = "Valor"        # coluna com valores monetários
-COL_CATEGORIA   = "Categoria"    # coluna com categorias/descrições
-COL_DATA        = "Data"         # coluna de datas
-COL_CHAVE       = "NF"           # coluna chave única (nota fiscal, ID, etc.)
-COL_ENTIDADE    = "Cliente"      # coluna de cliente/fornecedor
+# Nomes das colunas — lidos do config.yaml; edite aqui para sobrescrever
+COL_VALOR    = _COLS_CFG.get('valor',     'Valor')
+COL_CATEGORIA= _COLS_CFG.get('categoria', 'Categoria')
+COL_DATA     = _COLS_CFG.get('data',      'Data')
+COL_CHAVE    = _COLS_CFG.get('chave',     'NF')
+COL_ENTIDADE = _COLS_CFG.get('entidade',  'Cliente')
 
 # Colunas obrigatórias para checar se estão vazias
-COLUNAS_OBRIGATORIAS = [COL_VALOR, COL_DATA, COL_CHAVE]
+COLUNAS_OBRIGATORIAS = [c for c in _CFG.get('colunas_obrigatorias', [COL_VALOR, COL_DATA, COL_CHAVE])]
 
 # ══════════════════════════════════════════════════════════════════
 # EXECUÇÃO — não precisa editar abaixo

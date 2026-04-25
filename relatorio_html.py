@@ -258,10 +258,12 @@ class GeradorHTML:
     def _secao_auditoria(self, df: pd.DataFrame) -> str:
         rows = ''
         for _, r in df.iterrows():
-            sev   = str(r.get('Severidade', ''))
-            linha = str(r.get('Linha', ''))
-            if isinstance(r.get('Linha'), list):
-                linha = ', '.join(str(x) for x in r['Linha'][:5])
+            sev    = str(r.get('Severidade', ''))
+            raw    = r.get('Linha', '')
+            if isinstance(raw, list):
+                linha = ', '.join(str(x) for x in raw[:5])
+            else:
+                linha = str(raw)
             imp = r.get('Impacto R$', '')
             imp_str = f"R$ {float(imp):,.2f}" if imp and str(imp) not in ('', '0', '0.0') else '—'
             rows += (f"<tr><td>{self._badge(sev)}</td>"
@@ -285,7 +287,7 @@ class GeradorHTML:
     def _secao_aging(self, df: pd.DataFrame) -> str:
         if 'Total_RS' not in df.columns or 'Faixa_Aging' not in df.columns:
             logger.warning("_secao_aging: colunas esperadas ausentes no DataFrame de aging.")
-            return ''
+            return '<section class="card"><h2>📅 Aging de Recebíveis</h2><p style="color:#888;font-size:13px">Colunas de aging não encontradas no DataFrame (Total_RS / Faixa_Aging).</p></section>'
         total = df['Total_RS'].sum()
         rows = ''
         for _, r in df.iterrows():

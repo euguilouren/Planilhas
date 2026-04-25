@@ -761,10 +761,6 @@ class ProcessadorArquivo:
             porta  = cfg_email.get('smtp_porta', 587)
             rem    = cfg_email['remetente']
             senha = os.environ.get('EMAIL_SENHA', '')
-            if not senha:
-                senha = cfg_email.get('senha', '')
-                if senha:
-                    logger.warning("EMAIL_SENHA lida do config.yaml — prefira a variável de ambiente EMAIL_SENHA")
             dests = cfg_email.get('destinatarios', [])
             if not dests:
                 logger.warning("Email ativo mas lista de destinatários vazia.")

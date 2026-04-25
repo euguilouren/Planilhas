@@ -656,6 +656,7 @@ tr:hover td{background:#F7FAFD}
 
 <!-- Loader -->
 <div id="loader"><div class="spinner"></div><span class="loader-text">Analisando planilha...</span></div>
+<div id="erros-cdn" style="display:none;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;border-radius:8px;padding:12px 16px;max-width:820px;margin:12px auto;font-size:13px;text-align:center"></div>
 
 <!-- Header -->
 <div class="header">
@@ -994,7 +995,11 @@ function previewNormalizacao() {
 
 // ── Download do template padrão ─────────────────────────
 function baixarTemplate() {
-  if (typeof XLSX === 'undefined') { alert('Biblioteca XLSX não carregada.'); return; }
+  if (typeof XLSX === 'undefined') {
+    document.getElementById('erros-cdn').textContent = 'SheetJS não carregado — verifique sua conexão e recarregue a página.';
+    document.getElementById('erros-cdn').style.display = 'block';
+    return;
+  }
   const wb  = XLSX.utils.book_new();
   const cols = COLUNAS_PADRAO.map(c=>c.nome);
 
@@ -1046,6 +1051,12 @@ document.getElementById('file-input').addEventListener('change', e => {
 // CARREGAR ARQUIVO
 // ══════════════════════════════════════════════════════
 function carregarArquivo(file) {
+  if (typeof XLSX === 'undefined') {
+    const el = document.getElementById('erros-cdn');
+    el.textContent = 'SheetJS não carregado — verifique sua conexão e recarregue a página.';
+    el.style.display = 'block';
+    return;
+  }
   _nomeArquivo = file.name;
   mostrarLoader(true);
   const reader = new FileReader();
