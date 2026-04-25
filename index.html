@@ -660,10 +660,16 @@ tr:hover td{background:#F7FAFD}
   .drop-zone{padding:32px 20px}
   #dashboard{padding:12px}
   .card{padding:16px}
-  .kpi{padding:14px 16px}
-  .kpi .val{font-size:20px}
-  .toolbar{gap:6px;padding:10px 12px;overflow-x:auto;flex-wrap:nowrap}
-  .toolbar .btn-sm{white-space:nowrap;flex-shrink:0}
+  /* KPI: evita quebra de linha em valores longos */
+  .kpi{padding:12px 14px}
+  .kpi .val{font-size:16px;letter-spacing:-.3px;word-break:break-all}
+  .kpi .lbl{font-size:9.5px}
+  .kpi .sub{font-size:10px}
+  /* Toolbar: esconde tag (já aparece no header) e reorganiza botões */
+  .toolbar{gap:6px;padding:10px 12px;flex-wrap:wrap}
+  .toolbar .tag-arquivo{display:none}
+  .toolbar .toolbar-spacer{display:none}
+  .toolbar .btn-sm{font-size:11.5px;padding:6px 12px;flex:1;text-align:center}
   .search-wrap,.search-wrap input{width:100%}
   #upload-area{margin:24px auto;padding:0 12px}
 }
