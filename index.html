@@ -96,25 +96,36 @@ function calcularIntegridade(dados, cols, kpis, dre, pareto) {
   const okVal = pctVal >= 85;
   if (okVal) passed++;
   checks.push({ nome:'Valores processados', status: okVal?'OK':'ALERTA',
-    detalhe:`${comValor} de ${dados.length} (${pctVal.toFixed(0)}%)` });
+    detalhe:`${comValor} de ${dados.length} (${pctVal.toFixed(0)}%)`,
+    como: okVal ? null : `Verifique as linhas com célula em branco ou texto não-numérico na coluna "${cols.valor||'Valor'}". No Excel: use Ctrl+End para ver o intervalo de dados e filtre pela coluna buscando células vazias.` });
 
   // Check 2: checksum (informativo)
   total++;  passed++;
   const checksum = dados.reduce((s,r)=>{ const v=toNum(r[cols.valor]); return s+(isNaN(v)?0:Math.abs(v)); }, 0);
   checks.push({ nome:'Checksum (soma |valores|)', status:'INFO',
-    detalhe:`${fmtBRL(checksum)} — confirme com =SOMA() no Excel`, checksum });
+    detalhe:`${fmtBRL(checksum)} — confirme com =SOMA() no Excel`,
+    como: `No Excel, clique em uma célula vazia e digite =SOMA(${cols.valor||'coluna'}1:${cols.valor||'coluna'}9999). O resultado deve ser ${fmtBRL(checksum)}.`,
+    checksum });
 
   // Check 3: cross-check Pareto × total
   if (pareto && pareto.length && kpis && kpis.totalValor) {
     total++;
     const somaPareto = pareto.reduce((s,i)=>s+i.total,0);
+    const totalEntidades = pareto.totalEntidades || pareto.length;
+    const exibidos = pareto.length;
+    const fora = totalEntidades - exibidos;
     const diff = Math.abs(somaPareto - Math.abs(kpis.totalValor));
     const pctDiff = kpis.totalValor ? diff / Math.abs(kpis.totalValor) * 100 : 0;
-    const okP = pctDiff < 5;
+    // Se há mais entidades do que o top exibido, a diferença é ESPERADA (entidades fora do top)
+    const truncado = totalEntidades > exibidos;
+    const okP = truncado || pctDiff < 1;
     if (okP) passed++;
-    checks.push({ nome:'Cross-check Pareto × Total', status: okP?'OK':'DIVERGENTE',
-      detalhe: okP ? `Pareto ${fmtBRL(somaPareto)} ≈ Total ${fmtBRL(kpis.totalValor)}`
-                   : `Diferença de ${pctDiff.toFixed(1)}% (${fmtBRL(diff)})` });
+    checks.push({ nome:'Cross-check Pareto × Total', status: okP ? (truncado ? 'INFO' : 'OK') : 'DIVERGENTE',
+      detalhe: truncado
+        ? `Top ${exibidos} de ${totalEntidades} entidades — as ${fora} restantes representam ${pctDiff.toFixed(1)}% (${fmtBRL(diff)}). Normal no Pareto.`
+        : okP ? `Pareto ${fmtBRL(somaPareto)} ≈ Total ${fmtBRL(kpis.totalValor)}`
+              : `Soma do Pareto (${fmtBRL(somaPareto)}) difere do Total (${fmtBRL(Math.abs(kpis.totalValor))}) em ${pctDiff.toFixed(1)}%`,
+      como: !okP ? `Possíveis causas: (1) filtros ativos na planilha que excluem linhas; (2) fórmulas que calculam valores dinamicamente; (3) mais de uma aba com dados. Verifique no Excel se =SOMA() da coluna "${cols.valor||'Valor'}" bate com ${fmtBRL(Math.abs(kpis.totalValor))}.` : null });
   }
 
   // Check 4: cobertura de datas
@@ -125,7 +136,8 @@ function calcularIntegridade(dados, cols, kpis, dre, pareto) {
     const okData = pctData >= 80;
     if (okData) passed++;
     checks.push({ nome:'Cobertura de datas', status: okData?'OK':'ALERTA',
-      detalhe:`${pctData.toFixed(0)}% dos registros com data válida` });
+      detalhe:`${pctData.toFixed(0)}% dos registros com data válida`,
+      como: !okData ? `A coluna "${cols.data||'Data'}" tem registros com data inválida ou em formato de texto. No Excel, selecione a coluna e formate como "Data" (Formato > Células > Data). Datas em texto (ex: "17/01/2024" como texto) não são reconhecidas.` : null });
   }
 
   // Check 5: cobertura de categorias
@@ -136,7 +148,8 @@ function calcularIntegridade(dados, cols, kpis, dre, pareto) {
     const nivel = pctCat >= 80 ? 'ALTA' : pctCat >= 50 ? 'MÉDIA' : 'BAIXA';
     if (pctCat >= 80) passed++;
     checks.push({ nome:'Cobertura de categorias', status: nivel,
-      detalhe:`${pctCat.toFixed(0)}% categorizados` });
+      detalhe:`${pctCat.toFixed(0)}% categorizados`,
+      como: pctCat < 80 ? `${(100-pctCat).toFixed(0)}% das linhas não têm categoria preenchida na coluna "${cols.categoria}". O DRE automático só classifica linhas com categoria. Preencha a coluna com termos como RECEITA, DESPESA, CMV, etc.` : null });
   }
 
   const confianca = total ? Math.round(passed / total * 100) : 100;
@@ -345,13 +358,17 @@ function calcularPareto(dados, colEntidade, colValor, top = 15) {
     .map(([nome, total]) => ({ nome, total }))
     .sort((a,b) => b.total - a.total);
   const totalGeral = lista.reduce((s,i)=>s+i.total, 0);
+  const totalEntidades = lista.length;
   let acum = 0;
-  return lista.slice(0, top).map((item, idx) => {
+  const items = lista.slice(0, top).map((item, idx) => {
     const pct = totalGeral ? item.total / totalGeral * 100 : 0;
     acum += pct;
     return { ranking: idx+1, nome: item.nome, total: item.total,
              pct, acumulado: acum, classe: acum <= 80 ? 'A' : 'B' };
   });
+  items.totalEntidades = totalEntidades;
+  items.totalGeral = totalGeral;
+  return items;
 }
 
 // ══════════════════════════════════════════════════════
@@ -688,6 +705,9 @@ body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:var(--bg);
 .check-alerta,.check-media,.check-parcial{background:#FEF3C7;color:#92400E}
 .check-divergente,.check-baixa{background:#FEE2E2;color:#991B1B}
 .check-alta{background:#D1FAE5;color:#065F46}
+.check-item{margin-bottom:6px}
+.check-como{font-size:11px;color:#64748B;background:#F8FAFC;border-left:3px solid #CBD5E1;
+  padding:6px 10px;margin-bottom:4px;border-radius:0 6px 6px 0;line-height:1.5}
 /* Tabela */
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;font-size:12px}
@@ -1253,7 +1273,10 @@ function renderVerificacao(integ) {
 
   const badges = integ.checks.map(c => {
     const cls = `check-badge check-${(c.status||'').toLowerCase().replace(/[^a-z]/g,'')}`;
-    return `<span class="${cls}">${c.status} — ${c.nome}: ${c.detalhe}</span>`;
+    const como = c.como
+      ? `<div class="check-como"><strong>Como investigar:</strong> ${esc(c.como)}</div>`
+      : '';
+    return `<div class="check-item">${como}<span class="${cls}">${c.status} — ${c.nome}: ${c.detalhe}</span></div>`;
   }).join('');
 
   cont.innerHTML = `
@@ -1303,7 +1326,19 @@ function renderAuditoria(lista) {
 // RENDER AGING
 // ══════════════════════════════════════════════════════
 function renderAging(lista) {
-  if (!lista || !lista.length) return;
+  if (!lista || !lista.length) {
+    document.getElementById('aging-content').innerHTML = `
+      <div style="padding:14px;background:#FFF7ED;border-left:4px solid #F59E0B;border-radius:0 8px 8px 0">
+        <strong style="color:#92400E">⚠ Coluna de vencimento não mapeada</strong>
+        <p style="margin:6px 0 0;font-size:12px;color:#78350F;line-height:1.6">
+          O Aging de Recebíveis precisa de uma coluna com a <strong>data de vencimento</strong> de cada registro.<br>
+          <strong>Como ativar:</strong> Clique em <em>"Novo arquivo"</em>, reimporte a planilha e no passo de
+          <em>"Configuração de Colunas"</em> selecione a coluna correta no campo <strong>Vencimento</strong>.
+          Se sua planilha não tem essa coluna, adicione uma com o nome "Vencimento" e preencha as datas.
+        </p>
+      </div>`;
+    return;
+  }
   const total = lista.reduce((s,i)=>s+i.total,0);
   const COR = { 'A vencer':'#3A9E5C','Vencido 1-30d':'#E8A020',
     'Vencido 31-60d':'#CC6C1A','Vencido 61-90d':'#C0392B','Vencido +90d':'#6B0D0D','Sem data':'#9BA8B5' };
