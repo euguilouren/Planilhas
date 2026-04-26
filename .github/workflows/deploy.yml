@@ -26,7 +26,7 @@ jobs:
         run: npm install -g javascript-obfuscator@4
 
       - name: Obfuscar HTML
-        run: python3 scripts/obfuscar_html.py src/index.html dist/index.html
+        run: python3 scripts/obfuscar_html.py index.html dist/index.html
 
       - name: Verificar resultado
         run: |

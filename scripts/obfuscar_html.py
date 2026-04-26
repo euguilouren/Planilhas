@@ -4,7 +4,7 @@ Extrai os blocos <script> inline do HTML, obfusca com javascript-obfuscator
 e reconstrói o arquivo com o JS ofuscado.
 
 Uso:
-    python3 scripts/obfuscar_html.py src/index.html dist/index.html
+    python3 scripts/obfuscar_html.py index.html dist/index.html
 """
 import re
 import subprocess
@@ -20,9 +20,9 @@ OBFUSCATOR_FLAGS = [
     '--identifier-names-generator', 'hexadecimal',
     '--rename-globals', 'false',
     '--self-defending', 'true',
-    '--domain-lock', '["euguilouren.github.io"]',
+    '--domain-lock', 'euguilouren.github.io',
     '--string-array', 'true',
-    '--string-array-encoding', '["base64"]',
+    '--string-array-encoding', 'base64',
     '--string-array-threshold', '0.75',
     '--dead-code-injection', 'false',
     '--unicode-escape-sequence', 'false',
