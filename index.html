@@ -931,7 +931,7 @@ tr:hover td{background:var(--azul3)}
         <strong style="color:#5B21B6;font-size:13px">Análise gerada</strong>
         <button onclick="copiarAnalise()" style="background:#EDE9FE;color:#5B21B6;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">Copiar</button>
       </div>
-      <div id="claude-texto" style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;color:#1F1B4B;max-height:460px;overflow-y:auto"></div>
+      <div id="claude-texto" style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:14px;font-size:13px;line-height:1.7;color:#1F1B4B;max-height:460px;overflow-y:auto"></div>
     </div>
     <div id="claude-erro" style="display:none;background:#FEE2E2;border:1px solid #FECACA;border-radius:8px;padding:12px;color:#991B1B;font-size:13px"></div>
   </div>
@@ -957,6 +957,7 @@ let _ultimaAuditoria = null;
 let _ultimoAging     = null;
 let _ultimoDre       = null;
 let _ultimoPareto    = null;
+let _ultimaAnaliseClaude = '';
 
 function _toast(msg, ms=3000) {
   const el = document.getElementById('toast');
@@ -1407,8 +1408,7 @@ Ao receber um briefing de dados financeiros:
 2. DIAGNÓSTICO — interprete o que os números indicam no contexto do negócio
 3. AÇÕES — sugira 3 a 5 ações concretas e priorizadas
 Seja direto e objetivo. Use tabelas Markdown para comparativos e rankings.
-Destaque valores monetários no formato brasileiro: R$ 1.234,56.
-Máximo de 600 tokens por resposta.`;
+Destaque valores monetários no formato brasileiro: R$ 1.234,56.`;
 
 function abrirPainelClaude() {
   const card  = document.getElementById('card-claude');
@@ -1464,6 +1464,46 @@ function _gerarBriefing() {
   return linhas.join('\n');
 }
 
+function _inlineMd(s) {
+  return s
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`(.+?)`/g,'<code style="background:#ede9fe;padding:1px 4px;border-radius:3px">$1</code>');
+}
+
+function _markdownParaHTML(md) {
+  if (!md) return '';
+  const linhas = md.split('\n');
+  let html = '', lista = false, tabela = false;
+  for (const l of linhas) {
+    if (lista && !l.match(/^[-*]\s/) && !l.match(/^\d+\.\s/)) { html += '</ul>'; lista = false; }
+    if (tabela && !l.match(/^\|/)) { html += '</table>'; tabela = false; }
+    if (l.match(/^###\s/))      html += `<h5 style="margin:10px 0 3px;color:var(--navy)">${_inlineMd(l.slice(4))}</h5>`;
+    else if (l.match(/^##\s/))  html += `<h4 style="margin:12px 0 4px;color:var(--navy)">${_inlineMd(l.slice(3))}</h4>`;
+    else if (l.match(/^#\s/))   html += `<h3 style="margin:12px 0 5px;color:var(--navy)">${_inlineMd(l.slice(2))}</h3>`;
+    else if (l.match(/^[-*]\s/)) {
+      if (!lista) { html += '<ul style="margin:4px 0 4px 18px;padding:0">'; lista = true; }
+      html += `<li style="margin:2px 0">${_inlineMd(l.slice(2))}</li>`;
+    } else if (l.match(/^\d+\.\s/)) {
+      if (!lista) { html += '<ul style="margin:4px 0 4px 18px;padding:0;list-style:decimal">'; lista = true; }
+      html += `<li style="margin:2px 0">${_inlineMd(l.replace(/^\d+\.\s/, ''))}</li>`;
+    } else if (l.match(/^\|/)) {
+      if (l.match(/^\|[-:\s|]+\|$/)) continue;
+      if (!tabela) { html += '<table style="border-collapse:collapse;width:100%;font-size:12px;margin:6px 0">'; tabela = true; }
+      const cells = l.split('|').slice(1,-1);
+      html += '<tr>' + cells.map(c => `<td style="border:1px solid var(--border);padding:4px 8px">${_inlineMd(c.trim())}</td>`).join('') + '</tr>';
+    } else if (l.trim() === '') {
+      html += '<br>';
+    } else {
+      html += `<p style="margin:4px 0">${_inlineMd(l)}</p>`;
+    }
+  }
+  if (lista)  html += '</ul>';
+  if (tabela) html += '</table>';
+  return html;
+}
+
 async function analisarComClaude(btn) {
   const apiKey = (document.getElementById('claude-api-key').value || '').trim();
   if (!apiKey) { alert('Insira sua chave da API Anthropic.'); return; }
@@ -1489,8 +1529,8 @@ async function analisarComClaude(btn) {
         'anthropic-dangerous-allow-browser': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 1024,
+        model: 'claude-opus-4-7',
+        max_tokens: 2048,
         system: _CLAUDE_SYSTEM,
         messages: [{ role: 'user', content: _gerarBriefing() }],
       }),
@@ -1505,7 +1545,8 @@ async function analisarComClaude(btn) {
     }
 
     const data = await res.json();
-    texto.textContent    = data.content?.[0]?.text || '(sem resposta)';
+    _ultimaAnaliseClaude = data.content?.[0]?.text || '(sem resposta)';
+    texto.innerHTML      = _markdownParaHTML(_ultimaAnaliseClaude);
     resultado.style.display = 'block';
     resultado.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
@@ -1518,7 +1559,7 @@ async function analisarComClaude(btn) {
 }
 
 function copiarAnalise() {
-  const t = document.getElementById('claude-texto').textContent;
+  const t = _ultimaAnaliseClaude || document.getElementById('claude-texto').innerText;
   if (navigator.clipboard) {
     navigator.clipboard.writeText(t).then(() => alert('Análise copiada!')).catch(() => _copiarFallback(t));
   } else {

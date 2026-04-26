@@ -5,6 +5,59 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.0] — 2026-04-26
+
+### Added
+- **CLAUDE.md** — architecture guide for AI-assisted refinements: file map, state variables,
+  CSS variables, extension points, ERP how-to, and protected sections.
+- **ERP auto-detection in JS** — `MAPAS_ERP_JS` object covers 20 Brazilian ERPs;
+  `detectarERP()` identifies system from column headers; toast notification on match.
+- **ERP selector** — `<select id="sel-erp-sistema">` in the toolbar lets users force a
+  specific ERP mapping; hidden on mobile (≤600 px).
+- **Redesigned drop zone** — SVG icon, upload title/subtitle, 3-step workflow hint,
+  `.btn-upload-choose` primary button, `drag-over` visual state.
+- **Integrity verification card** — `#card-verificacao` with cross-checks (record count,
+  Pareto consistency, DRE consistency, date validity, null values); each check shows
+  a "Como investigar:" guidance block when flagged.
+- **Sign-based DRE** — when no `Categoria` column is present, `construirDRE()` classifies
+  positive values as Receita and negative as Despesas automatically; a blue banner signals
+  the `(+)/(-) mode` to the user.
+- **Downloadable template** — `baixarTemplate()` generates a 2-sheet XLSX: `DADOS` with
+  sample rows (positive/negative values) and `INSTRUÇÕES` with column documentation.
+- **20 ERPs in Python** — `base_conhecimento/__init__.py` expanded from 4 to 20 systems
+  including TOTVS RM/Datasul, Domínio, Sankhya, Sênior, Conta Azul, Bling, Tiny, Nibo,
+  Granatum, Cigam, Linx, Alterdata, Mega, GestãoClick, NFe XML.
+- **Markdown rendering** — Claude API responses now rendered as formatted HTML
+  (headings, bold, lists, tables) instead of plain text.
+
+### Changed
+- **Claude model** updated from `claude-opus-4-5` to `claude-opus-4-7`.
+- **`max_tokens`** raised from 1024 to 2048 to prevent analysis truncation.
+- **Categoria field removed from column-mapping UI** — auto-detected silently from ERP
+  mapping or sign; `_cols` reduced to 5 keys.
+- **Pareto consistency check** now shows INFO (not DIVERGENTE) when top-15 is a subset
+  of more than 15 entities — false alarm eliminated.
+- **All integrity warnings** include an actionable "Como investigar:" section.
+- **API key disclosure** corrected: tooltip now says "salva apenas neste navegador
+  (localStorage)" instead of "nunca é armazenada".
+
+### Fixed
+- `javascript-obfuscator` CLI flags `--domain-lock` and `--string-array-encoding` were
+  passed as JSON arrays (`["base64"]`) — corrected to plain strings (`base64`).
+- `_gerarBriefing()` aging loop used `Object.entries()` on an array and wrong field names
+  (`a.sev`, `a.msg`) — fixed to `.filter().forEach()` with `a.severidade`/`a.descricao`.
+- `_ultimoDre` accessed as array after `construirDRE()` changed to return `{linhas, modo}`
+  object — all references updated.
+- `package.json` and `scripts/obfuscar_html.py` referenced deleted `src/index.html` after
+  the source file was moved back to root — corrected.
+
+### Security
+- `numpy` upgraded 1.26.4 → 2.2.6 (CVE mitigations).
+- `PyYAML` upgraded 6.0.1 → 6.0.3.
+- `pytest` upgraded 8.3.5 → 9.0.3 (CVE-2025-71176).
+
+---
+
 ## [1.2.0] — 2026-04-23
 
 ### Added
