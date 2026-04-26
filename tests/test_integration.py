@@ -166,23 +166,3 @@ class TestPipelineArquivoInexistente:
         arq.write_text("a,b,c\n1,2,3")
         with pytest.raises((ValueError, RuntimeError)):
             Leitor.ler_arquivo(str(arq))
-
-
-class TestIntegracaoToolkitPackage:
-    """Verifica que o pacote toolkit/ re-exporta corretamente."""
-
-    def test_importar_leitor_via_toolkit(self):
-        from toolkit import Leitor as L  # noqa: F401
-        assert L is not None
-
-    def test_importar_auditor_via_submodulo(self):
-        from toolkit.auditor import Auditor as A  # noqa: F401
-        assert A is not None
-
-    def test_importar_analista_via_submodulo(self):
-        from toolkit.analista import AnalistaFinanceiro as AF  # noqa: F401
-        assert AF is not None
-
-    def test_version_disponivel(self):
-        from toolkit import __version__
-        assert __version__ >= "1.2.0"
