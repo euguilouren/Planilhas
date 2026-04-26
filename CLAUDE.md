@@ -181,17 +181,16 @@ Arquivo: `base_conhecimento/__init__.py` → `MAPAS_ERP`
 ## Pipeline de Deploy
 
 ```
-main branch (código legível em src/index.html)
-  └─► push → .github/workflows/deploy.yml
-        → npm run build (scripts/build.js)
+push → main
+  └─► .github/workflows/deploy.yml
+        → python3 scripts/obfuscar_html.py index.html dist/index.html
             → javascript-obfuscator (domain-lock: euguilouren.github.io)
-            → dist/index.html (ofuscado)
         → peaceiris/actions-gh-pages → branch gh-pages
         → GitHub Pages serve gh-pages
 ```
 
 `dist/` está no `.gitignore` — nunca comitar manualmente.
-`index.html` na raiz é a cópia de desenvolvimento (legível, para `file://` local).
+`index.html` é a única fonte — editável localmente e entrada do pipeline.
 
 ---
 

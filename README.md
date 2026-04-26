@@ -110,8 +110,7 @@ python motor_automatico.py --arquivo minha.xlsx  # arquivo específico
 
 ```
 Planilhas/
-├── src/index.html           # Dashboard web — fonte legível (entrada do pipeline)
-├── index.html               # Cópia de desenvolvimento para testes locais
+├── index.html               # Dashboard web — única fonte (local + entrada do pipeline)
 ├── scripts/
 │   └── obfuscar_html.py     # Extrai, obfusca JS e reconstrói HTML para deploy
 ├── toolkit_financeiro.py    # Biblioteca core Python (12 classes)
@@ -139,7 +138,7 @@ Planilhas/
 ```
 push → main
   └─► deploy.yml
-        → python3 scripts/obfuscar_html.py src/index.html dist/index.html
+        → python3 scripts/obfuscar_html.py index.html dist/index.html
         → peaceiris/actions-gh-pages → branch gh-pages
         → GitHub Pages serve o JS obfuscado em euguilouren.github.io/Planilhas/
 ```
