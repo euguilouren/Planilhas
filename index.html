@@ -1026,6 +1026,7 @@ let _ultimoAging     = null;
 let _ultimoDre       = null;
 let _ultimoPareto    = null;
 let _ultimaAnaliseClaude = '';
+let _auditConfirmados    = new Set();
 
 function _toast(msg, ms=3000) {
   const el = document.getElementById('toast');
@@ -1117,11 +1118,12 @@ function carregarArquivo(file) {
             return obj;
           });
       }
-      _dadosOriginais = dados;
-      _dadosFiltrados = dados;
-      _headers        = headers;
-      _cols           = detectarColunas(headers);
-      _erpDetectado   = detectarERP(headers);
+      _dadosOriginais  = dados;
+      _dadosFiltrados  = dados;
+      _headers         = headers;
+      _cols            = detectarColunas(headers);
+      _erpDetectado    = detectarERP(headers);
+      _auditConfirmados.clear();
       mostrarLoader(false);
       _atualizarStep(2);
       mostrarConfigColunas(headers, _cols, _erpDetectado);
@@ -1331,9 +1333,16 @@ function renderVerificacao(integ) {
 // RENDER AUDITORIA
 // ══════════════════════════════════════════════════════
 const BADGE = { 'CRÍTICA':'b-critica','ALTA':'b-alta','MÉDIA':'b-media','BAIXA':'b-baixa' };
+function confirmarAuditoria(idx) {
+  if (_auditConfirmados.has(idx)) _auditConfirmados.delete(idx);
+  else _auditConfirmados.add(idx);
+  renderAuditoria(_ultimaAuditoria);
+}
+
 function renderAuditoria(lista) {
-  const criticos = lista.filter(p=>p.severidade==='CRÍTICA').length;
-  const badge    = criticos
+  const pendentes = lista.filter((_,i) => !_auditConfirmados.has(i));
+  const criticos  = pendentes.filter(p=>p.severidade==='CRÍTICA').length;
+  const badge     = criticos
     ? `<span class="badge b-critica">${criticos} CRÍTICO${criticos>1?'S':''}</span>` : '';
   document.getElementById('badge-auditoria').innerHTML = badge;
 
@@ -1342,16 +1351,38 @@ function renderAuditoria(lista) {
       '<p style="color:var(--verde);font-weight:bold;padding:12px">✓ Nenhum problema encontrado!</p>';
     return;
   }
-  const rows = lista.map(p => `
-    <tr>
-      <td><span class="badge ${BADGE[p.severidade]||'b-baixa'}">${esc(p.severidade)}</span></td>
+
+  const rows = lista.map((p, idx) => {
+    const confirmado = _auditConfirmados.has(idx);
+    const rowStyle   = confirmado ? 'opacity:0.45;background:#f7fdf7' : '';
+    const sevCell    = confirmado
+      ? `<span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7">✓ Verificado</span>`
+      : `<span class="badge ${BADGE[p.severidade]||'b-baixa'}">${esc(p.severidade)}</span>`;
+    const btnLabel   = confirmado ? 'Desfazer' : 'Confirmar ✓';
+    const btnStyle   = confirmado
+      ? 'background:#e5e7eb;color:#6b7280;border:1px solid #d1d5db'
+      : 'background:#d1fae5;color:#065f46;border:1px solid #6ee7b7';
+    return `<tr style="${rowStyle}">
+      <td>${sevCell}</td>
       <td>${esc(p.tipo)}</td><td>${esc(p.linha)}</td>
       <td>${esc(p.coluna)}</td><td>${esc(p.valor)}</td>
       <td>${esc(p.descricao)}</td>
-    </tr>`).join('');
+      <td><button onclick="confirmarAuditoria(${idx})"
+        style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap;${btnStyle}">${btnLabel}</button></td>
+    </tr>`;
+  }).join('');
+
+  const totalPend = pendentes.length;
+  const totalConf = _auditConfirmados.size;
+  const resumo    = totalConf > 0
+    ? `<div style="margin-bottom:10px;font-size:12px;color:#065f46;background:#d1fae5;padding:6px 12px;border-radius:6px;display:inline-block">
+        ✓ ${totalConf} item(ns) verificado(s) e confirmado(s) — ${totalPend} pendente(s)
+       </div>` : '';
+
   document.getElementById('auditoria-content').innerHTML = `
+    ${resumo}
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Severidade</th><th>Tipo</th><th>Linha(s)</th><th>Coluna</th><th>Valor</th><th>Descrição</th></tr></thead>
+      <thead><tr><th>Severidade</th><th>Tipo</th><th>Linha(s)</th><th>Coluna</th><th>Valor</th><th>Descrição</th><th>Ação</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
 }
@@ -1535,8 +1566,10 @@ function _gerarBriefing() {
   if (k.periodoInicio) linhas.push(`- Período: ${fmtData(k.periodoInicio)} → ${fmtData(k.periodoFim)}`);
 
   if (_ultimaAuditoria && _ultimaAuditoria.length) {
-    linhas.push(`\n## Auditoria (${_ultimaAuditoria.length} alerta(s))`);
-    _ultimaAuditoria.slice(0, 8).forEach(a => linhas.push(`- [${a.severidade}] ${a.tipo}: ${a.descricao}`));
+    const pendentes = _ultimaAuditoria.filter((_,i) => !_auditConfirmados.has(i));
+    const confirmados = _auditConfirmados.size;
+    linhas.push(`\n## Auditoria (${pendentes.length} alerta(s) pendente(s)${confirmados ? `, ${confirmados} confirmado(s) como correto(s)` : ''})`);
+    pendentes.slice(0, 8).forEach(a => linhas.push(`- [${a.severidade}] ${a.tipo}: ${a.descricao}`));
   } else {
     linhas.push(`\n## Auditoria\n- Nenhum problema encontrado.`);
   }
