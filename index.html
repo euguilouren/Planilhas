@@ -385,18 +385,42 @@ const MAPA_DRE = [
 ];
 
 function construirDRE(dados, colCat, colValor) {
-  if (!colCat || !colValor) return null;
+  if (!colValor) return null;
+
   const valores = {};
   MAPA_DRE.forEach(({ linha }) => { valores[linha] = 0; });
+  let modo = 'categoria';
 
-  dados.forEach(row => {
-    const cat = String(row[colCat] ?? '').toUpperCase().trim();
-    const v   = toNum(row[colValor]);
-    if (isNaN(v)) return;
-    for (const { linha, termos } of MAPA_DRE) {
-      if (termos.test(cat)) { valores[linha] += v; break; }
+  if (!colCat) {
+    // Fallback: classifica pelo sinal do valor (sem coluna Categoria)
+    modo = 'sinal';
+    dados.forEach(row => {
+      const v = toNum(row[colValor]);
+      if (isNaN(v)) return;
+      if (v >= 0) valores['Receita Bruta'] += v;
+      else valores['(-) Despesas Operacionais'] += v;
+    });
+  } else {
+    dados.forEach(row => {
+      const cat = String(row[colCat] ?? '').toUpperCase().trim();
+      const v   = toNum(row[colValor]);
+      if (isNaN(v)) return;
+      for (const { linha, termos } of MAPA_DRE) {
+        if (termos.test(cat)) { valores[linha] += v; break; }
+      }
+    });
+    // Se nenhuma linha foi classificada, aplica fallback por sinal
+    const totalClassificado = Object.values(valores).reduce((a,b)=>a+Math.abs(b),0);
+    if (totalClassificado === 0) {
+      modo = 'sinal';
+      dados.forEach(row => {
+        const v = toNum(row[colValor]);
+        if (isNaN(v)) return;
+        if (v >= 0) valores['Receita Bruta'] += v;
+        else valores['(-) Despesas Operacionais'] += v;
+      });
     }
-  });
+  }
 
   const rb  = valores['Receita Bruta'];
   const ded = Math.abs(valores['(-) Deduções']);
@@ -423,7 +447,7 @@ function construirDRE(dados, colCat, colValor) {
     { linha:'(-) IR/CSLL',                      valor:-ir,  tipo:'input' },
     { linha:'(=) Lucro Líquido',                valor:ll,   tipo:'total lucro' },
   ];
-  return linhas.map(l => ({ ...l, av: rl ? (l.valor/rl*100) : 0 }));
+  return { linhas: linhas.map(l => ({ ...l, av: rl ? (l.valor/rl*100) : 0 })), modo };
 }
 
 // ══════════════════════════════════════════════════════
@@ -1382,8 +1406,28 @@ function renderAging(lista) {
 // ══════════════════════════════════════════════════════
 // RENDER DRE
 // ══════════════════════════════════════════════════════
-function renderDRE(linhas) {
-  if (!linhas) return;
+function renderDRE(dre) {
+  const el = document.getElementById('dre-content');
+  if (!dre) {
+    el.innerHTML = `
+      <div style="padding:14px;background:#FFF7ED;border-left:4px solid #F59E0B;border-radius:0 8px 8px 0">
+        <strong style="color:#92400E">⚠ Coluna de categoria não mapeada</strong>
+        <p style="margin:6px 0 0;font-size:12px;color:#78350F;line-height:1.6">
+          O DRE automático precisa de uma coluna <strong>Categoria</strong> em cada linha, com termos como:<br>
+          <code style="background:#FEF3C7;padding:1px 5px;border-radius:3px">RECEITA</code>
+          <code style="background:#FEF3C7;padding:1px 5px;border-radius:3px">VENDA</code>
+          <code style="background:#FEF3C7;padding:1px 5px;border-radius:3px">DESPESA</code>
+          <code style="background:#FEF3C7;padding:1px 5px;border-radius:3px">CMV</code>
+          <code style="background:#FEF3C7;padding:1px 5px;border-radius:3px">ALUGUEL</code>
+          <code style="background:#FEF3C7;padding:1px 5px;border-radius:3px">SALARIO</code><br>
+          <strong>Como ativar:</strong> Adicione uma coluna "Categoria" na sua planilha, preencha o tipo de cada lançamento
+          e mapeie-a no campo <em>Categoria</em> ao importar. Com apenas uma coluna de valores,
+          o sistema usa o sinal: <strong>positivo = Receita, negativo = Despesa</strong>.
+        </p>
+      </div>`;
+    return;
+  }
+  const { linhas, modo } = dre;
   const rows = linhas.map(l => {
     const cls = l.tipo.includes('lucro') ? (l.valor>=0?'dre-lucro':'dre-prejuizo')
               : l.tipo==='total' ? 'dre-total' : 'dre-sub';
@@ -1393,7 +1437,16 @@ function renderDRE(linhas) {
       <td style="text-align:right;${corVal}">${fmtBRL(l.valor)}</td>
       <td style="text-align:right;color:#888">${av}</td></tr>`;
   }).join('');
-  document.getElementById('dre-content').innerHTML = `
+  const bannerModo = modo === 'sinal'
+    ? `<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:var(--radius-sm);
+          padding:8px 14px;margin-bottom:10px;font-size:11px;color:#1E40AF">
+        <strong>ℹ DRE simplificado por sinal de valor</strong> — valores positivos foram classificados como
+        Receita Bruta e negativos como Despesas Operacionais. Para um DRE completo com CMV, Deduções e IR,
+        adicione uma coluna "Categoria" na planilha e mapeie-a ao importar.
+      </div>`
+    : '';
+  el.innerHTML = `
+    ${bannerModo}
     <div class="tbl-wrap"><table>
       <thead><tr><th>Linha DRE</th><th style="text-align:right">Valor R$</th><th style="text-align:right">AV%</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -1503,9 +1556,9 @@ function _gerarBriefing() {
     }
   }
 
-  if (_ultimoDre && _ultimoDre.length) {
-    linhas.push(`\n## DRE Resumido`);
-    _ultimoDre.slice(0, 10).forEach(r => linhas.push(`- ${r.linha}: ${fmtV(r.valor)}`));
+  if (_ultimoDre && _ultimoDre.linhas && _ultimoDre.linhas.length) {
+    linhas.push(`\n## DRE Resumido${_ultimoDre.modo === 'sinal' ? ' (classificado por sinal de valor)' : ''}`);
+    _ultimoDre.linhas.slice(0, 10).forEach(r => linhas.push(`- ${r.linha}: ${fmtV(r.valor)}`));
   }
 
   if (_ultimoPareto && _ultimoPareto.length) {
