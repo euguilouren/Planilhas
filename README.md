@@ -1,25 +1,28 @@
-# 📊 Toolkit Financeiro
+# Planilha Financeira Pro
 
-> Análise autônoma de planilhas financeiras para empresas brasileiras
+> Dashboard financeiro 100% no browser + toolkit Python para empresas brasileiras
 
 **Powered by [Luan Guilherme Lourenço](https://github.com/euguilouren)**
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
+**[Abrir dashboard online →](https://euguilouren.github.io/Planilhas/)**
+
 ---
 
 ## Visão Geral
 
-O Toolkit Financeiro automatiza a análise de planilhas Excel e CSV, entregando:
+Arraste qualquer planilha `.xlsx` ou `.csv` e obtenha em segundos:
 
-- **Auditoria**: detecção de duplicatas, outliers, campos vazios e inconsistências temporais
-- **Aging / Contas a Receber**: faixas de vencimento, PCLD sugerida por bucket
-- **DRE automático**: classifica receitas, CMV e despesas conforme padrões brasileiros (CPC 26)
-- **Análise Pareto (curva ABC)**: identifica os clientes/fornecedores que geram 80% do resultado
-- **Conciliação**: reconciliação exata e fuzzy entre planilhas
-- **Relatório HTML e Excel**: formatados, coloridos e prontos para apresentação
+- **KPIs financeiros**: receitas, despesas, resultado líquido, ticket médio
+- **Auditoria**: duplicatas, outliers, campos vazios, inconsistências temporais
+- **Aging / Contas a Receber**: faixas de vencimento com gráfico visual
+- **DRE automático**: classifica receitas, CMV e despesas (padrão CPC 26)
+- **Pareto (curva ABC)**: clientes/fornecedores que geram 80% do resultado
+- **Verificação de integridade**: checksum, cross-checks, badges de confiança
+- **Detecção automática de ERP**: mapeia colunas de 20 sistemas brasileiros
 
-Suporte a ERPs: **TOTVS · Omie · Questor · SAP B1 · Domínio Sistemas**
+**ERPs suportados (20):** TOTVS Protheus · TOTVS RM · TOTVS Datasul · Omie · Questor · SAP B1 · Domínio · Sankhya · Senior · Cigam · Alterdata · Linx · Mega · Nibo · Granatum · Conta Azul · Bling · Tiny · GestãoClick · NFe XML
 
 ---
 
@@ -107,23 +110,38 @@ python motor_automatico.py --arquivo minha.xlsx  # arquivo específico
 
 ```
 Planilhas/
-├── toolkit_financeiro.py    # Biblioteca core (12 classes, ~1600 linhas)
-├── motor_automatico.py      # Daemon de monitoramento autônomo
-├── rodar.py                 # CLI interativo
+├── src/index.html           # Dashboard web — fonte legível (entrada do pipeline)
+├── index.html               # Cópia de desenvolvimento para testes locais
+├── scripts/
+│   └── obfuscar_html.py     # Extrai, obfusca JS e reconstrói HTML para deploy
+├── toolkit_financeiro.py    # Biblioteca core Python (12 classes)
+├── motor_automatico.py      # Daemon que monitora pasta_entrada/ continuamente
+├── rodar.py                 # CLI interativo (gera Excel + briefing)
 ├── relatorio_html.py        # Gerador de relatórios HTML
-├── index.html               # Dashboard web (zero dependências)
 ├── config.yaml              # Configuração central
 ├── requirements.txt         # Dependências Python (produção)
 ├── requirements-dev.txt     # Dependências de desenvolvimento + testes
-├── tests/                   # Suite de testes pytest (60 testes)
+├── tests/                   # Suite de testes pytest
 │   ├── conftest.py
 │   ├── test_toolkit_financeiro.py
 │   └── test_relatorio_html.py
 ├── base_conhecimento/
-│   ├── erp_mapeamentos.md   # Mapeamentos de campos TOTVS, Omie, SAP B1...
+│   ├── __init__.py          # MAPAS_ERP (20 ERPs), detectar_erp(), normalizar_colunas()
+│   ├── erp_mapeamentos.md   # Documentação dos 20 mapeamentos ERP
 │   └── contabilidade_br.md  # Referência contábil brasileira (CPC 26)
-├── instalar.sh / instalar.bat
-└── abrir.sh / abrir.bat
+└── .github/workflows/
+    ├── ci.yml               # Testes Python 3.10/3.11/3.12 + validações
+    └── deploy.yml           # Obfusca JS e publica no gh-pages
+```
+
+### Pipeline de Deploy
+
+```
+push → main
+  └─► deploy.yml
+        → python3 scripts/obfuscar_html.py src/index.html dist/index.html
+        → peaceiris/actions-gh-pages → branch gh-pages
+        → GitHub Pages serve o JS obfuscado em euguilouren.github.io/Planilhas/
 ```
 
 ### Módulos do `toolkit_financeiro.py`

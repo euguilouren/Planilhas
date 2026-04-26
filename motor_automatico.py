@@ -451,26 +451,12 @@ class ProcessadorArquivo:
     # ── Helpers internos ──────────────────────────────────────────
 
     def _normalizar_colunas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Detecta ERPs por correspondência exata ou fuzzy (difflib) nas colunas."""
-        from base_conhecimento import MAPAS_ERP
-        cols_upper = list(df.columns.str.upper())
-        sinais = {
-            'TOTVS':   ['E1_NUM', 'E1_CLIENTE', 'E1_VALOR'],
-            'OMIE':    ['NUMERO_DOCUMENTO', 'NOME_CLIENTE', 'VALOR_DOCUMENTO'],
-            'DOMINIO': ['HISTÓRICO', 'SAL. BASE'],
-            'QUESTOR': ['DT_LANCTO', 'VL_LANCTO'],
-            'SAP_B1':  ['DOCNUM', 'CARDCODE', 'DOCTOTAL'],
-        }
-        for erp, campos in sinais.items():
-            correspondencias = sum(
-                1 for campo in campos
-                if campo in cols_upper
-                or get_close_matches(campo, cols_upper, n=1, cutoff=0.85)
-            )
-            if correspondencias >= 2:
-                logger.info("      ERP detectado (fuzzy): %s", erp)
-                if erp in MAPAS_ERP:
-                    return df.rename(columns=MAPAS_ERP[erp])
+        """Detecta ERP de origem e normaliza colunas usando base_conhecimento (20 ERPs)."""
+        from base_conhecimento import detectar_erp, normalizar_colunas
+        erp = detectar_erp(df)
+        if erp:
+            logger.info("      ERP detectado: %s", erp)
+            return normalizar_colunas(df, erp)
         return df
 
     def _coletar_dups(self, df, col_chav, aba, lista):
@@ -761,6 +747,12 @@ class ProcessadorArquivo:
             porta  = cfg_email.get('smtp_porta', 587)
             rem    = cfg_email['remetente']
             senha = os.environ.get('EMAIL_SENHA', '')
+            if not senha and cfg_email.get('senha'):
+                logger.warning(
+                    "Senha de e-mail definida em config.yaml — use a variável de ambiente "
+                    "EMAIL_SENHA para evitar expor credenciais no repositório."
+                )
+                senha = cfg_email['senha']
             dests = cfg_email.get('destinatarios', [])
             if not dests:
                 logger.warning("Email ativo mas lista de destinatários vazia.")

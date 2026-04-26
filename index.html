@@ -952,6 +952,11 @@ let _nomeArquivo    = '';
 let _chartAging     = null;
 let _erpDetectado   = null;
 let _toastTimer     = null;
+let _ultimosKpis     = null;
+let _ultimaAuditoria = null;
+let _ultimoAging     = null;
+let _ultimoDre       = null;
+let _ultimoPareto    = null;
 
 function _toast(msg, ms=3000) {
   const el = document.getElementById('toast');
@@ -1093,23 +1098,16 @@ function mostrarConfigColunas(headers, cols, erpDetectado) {
 
   const grid = document.getElementById('col-selects');
   grid.innerHTML = '';
-  _dadosNormalizados = null;
-  document.getElementById('preview-padrao').style.display = 'none';
-  document.getElementById('btn-analisar').style.display   = 'none';
-  COLUNAS_PADRAO.forEach(col => {
-    const div    = document.createElement('div');
+  for (const [tipo, label] of Object.entries(labels)) {
+    const div = document.createElement('div');
     div.className = 'col-group';
-    const selId  = `sel-${col.nome.toLowerCase()}`;
-    const defVal = defaults[col.nome];
-    const req    = col.obrigatorio ? ' <span style="color:#C0392B">*</span>' : '';
-    const hint   = col.opcoes ? col.opcoes.slice(0,3).join(', ')+'…' : col.tipo;
-    const sel    = headers.map(h =>
-      `<option value="${h}" ${defVal===h?'selected':''}>${h}</option>`
+    const sel = headers.map(h =>
+      `<option value="${h}" ${cols[tipo]===h?'selected':''}>${h}</option>`
     ).join('');
-    div.innerHTML = `<label>${col.nome}${req} <small style="color:#8FA3BC;font-weight:400">(${hint})</small></label>
-      <select id="${selId}"><option value="">(nenhuma)</option>${sel}</select>`;
+    div.innerHTML = `<label>${label}</label>
+      <select id="sel-${tipo}"><option value="">(nenhuma)</option>${sel}</select>`;
     grid.appendChild(div);
-  });
+  }
   document.getElementById('col-config').style.display = 'block';
 }
 
@@ -1124,15 +1122,10 @@ function aplicarMapeamentoERP(erpKey) {
 }
 
 function lerColsSelecionadas() {
-  return {
-    valor:      document.getElementById('sel-valor')?.value      || null,
-    data:       document.getElementById('sel-data')?.value       || null,
-    vencimento: document.getElementById('sel-vencimento')?.value || null,
-    categoria:  document.getElementById('sel-categoria')?.value  || null,
-    entidade:   document.getElementById('sel-cliente')?.value    || null,
-    chave:      document.getElementById('sel-nf')?.value         || null,
-    tipo:       document.getElementById('sel-tipo')?.value       || null,
-  };
+  const tipos = ['valor','data','vencimento','categoria','entidade','chave'];
+  const c = {};
+  tipos.forEach(t => { c[t] = document.getElementById(`sel-${t}`)?.value || null; });
+  return c;
 }
 
 // ══════════════════════════════════════════════════════
@@ -1142,16 +1135,8 @@ function executarAnalise() {
   mostrarLoader(true);
   setTimeout(() => {
     try {
-      let dados;
-      if (_dadosNormalizados && _dadosNormalizados.length) {
-        dados = _dadosNormalizados;
-        _headers = COLUNAS_PADRAO.map(c => c.nome);
-        _cols = { valor:'Valor', data:'Data', vencimento:'Vencimento',
-                  categoria:'Categoria', entidade:'Cliente', chave:'NF', tipo:'Tipo' };
-      } else {
-        _cols = lerColsSelecionadas();
-        dados = _dadosOriginais;
-      }
+      _cols = lerColsSelecionadas();
+      const dados = _dadosOriginais;
 
       // KPIs
       const kpis = calcularKPIs(dados, _cols);
