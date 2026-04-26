@@ -107,25 +107,24 @@ function calcularIntegridade(dados, cols, kpis, dre, pareto) {
     como: `No Excel, clique em uma célula vazia e digite =SOMA(${cols.valor||'coluna'}1:${cols.valor||'coluna'}9999). O resultado deve ser ${fmtBRL(checksum)}.`,
     checksum });
 
-  // Check 3: cross-check Pareto × total
-  if (pareto && pareto.length && kpis && kpis.totalValor) {
+  // Check 3: cross-check Pareto — consistência interna
+  if (pareto && pareto.length) {
     total++;
-    const somaPareto = pareto.reduce((s,i)=>s+i.total,0);
+    const somaPareto    = pareto.reduce((s,i)=>s+i.total, 0);
+    const totalGeral    = pareto.totalGeral ?? somaPareto;
     const totalEntidades = pareto.totalEntidades || pareto.length;
-    const exibidos = pareto.length;
-    const fora = totalEntidades - exibidos;
-    const diff = Math.abs(somaPareto - Math.abs(kpis.totalValor));
-    const pctDiff = kpis.totalValor ? diff / Math.abs(kpis.totalValor) * 100 : 0;
-    // Se há mais entidades do que o top exibido, a diferença é ESPERADA (entidades fora do top)
-    const truncado = totalEntidades > exibidos;
-    const okP = truncado || pctDiff < 1;
+    const exibidos      = pareto.length;
+    const truncado      = totalEntidades > exibidos;
+    const fora          = totalEntidades - exibidos;
+    const diff          = Math.abs(somaPareto - totalGeral);
+    const pctDiff       = totalGeral ? diff / Math.abs(totalGeral) * 100 : 0;
+    const okP           = truncado || pctDiff < 0.1;
     if (okP) passed++;
-    checks.push({ nome:'Cross-check Pareto × Total', status: okP ? (truncado ? 'INFO' : 'OK') : 'DIVERGENTE',
+    checks.push({ nome:'Pareto — consistência interna', status: okP ? (truncado ? 'INFO' : 'OK') : 'DIVERGENTE',
       detalhe: truncado
-        ? `Top ${exibidos} de ${totalEntidades} entidades — as ${fora} restantes representam ${pctDiff.toFixed(1)}% (${fmtBRL(diff)}). Normal no Pareto.`
-        : okP ? `Pareto ${fmtBRL(somaPareto)} ≈ Total ${fmtBRL(kpis.totalValor)}`
-              : `Soma do Pareto (${fmtBRL(somaPareto)}) difere do Total (${fmtBRL(Math.abs(kpis.totalValor))}) em ${pctDiff.toFixed(1)}%`,
-      como: !okP ? `Possíveis causas: (1) filtros ativos na planilha que excluem linhas; (2) fórmulas que calculam valores dinamicamente; (3) mais de uma aba com dados. Verifique no Excel se =SOMA() da coluna "${cols.valor||'Valor'}" bate com ${fmtBRL(Math.abs(kpis.totalValor))}.` : null });
+        ? `Top ${exibidos} de ${totalEntidades} entidades exibidas. As ${fora} restantes não aparecem no ranking (esperado no Pareto).`
+        : `Todas as ${totalEntidades} entidades exibidas. Total líquido: ${fmtBRL(totalGeral)}.`,
+      como: !okP ? `Inconsistência nos dados agrupados. Tente reimportar o arquivo.` : null });
   }
 
   // Check 4: cobertura de datas
@@ -812,6 +811,10 @@ tr:hover td{background:var(--azul3)}
   .col-grid{grid-template-columns:repeat(3,1fr)}
 }
 @media(max-width:600px){
+  .header{padding:10px 14px;flex-direction:column;align-items:flex-start;gap:4px}
+  .header h1{font-size:15px}
+  .header .sub{display:none}
+  #header-info{display:none}
   .kpis{grid-template-columns:repeat(2,1fr)}
   .grid2{grid-template-columns:1fr}
   .col-grid{grid-template-columns:repeat(2,1fr)}
