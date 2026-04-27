@@ -184,7 +184,11 @@ function toDate(v) {
   const s = String(v).trim();
   // DD/MM/YYYY
   const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (br) return new Date(+br[3], +br[2]-1, +br[1]);
+  if (br) {
+    const d = new Date(+br[3], +br[2]-1, +br[1]);
+    if (d.getDate() !== +br[1] || d.getMonth() !== +br[2]-1) return null;
+    return d;
+  }
   const d = new Date(s);
   return isNaN(d) ? null : d;
 }
@@ -469,8 +473,8 @@ function calcularKPIs(dados, cols) {
   const colData = cols.data   || 'Data';
 
   const datas = dados.map(r => toDate(r[colData])).filter(Boolean);
-  const minData = datas.length ? new Date(Math.min(...datas)) : null;
-  const maxData = datas.length ? new Date(Math.max(...datas)) : null;
+  const minData = datas.length ? datas.reduce((a,b) => a < b ? a : b) : null;
+  const maxData = datas.length ? datas.reduce((a,b) => a > b ? a : b) : null;
 
   let receita = 0, despesa = 0, nfRec = 0, nfDesp = 0;
   dados.forEach(r => {
@@ -1574,7 +1578,9 @@ function renderAging(lista) {
 
   // Gráfico
   if (_chartAging) _chartAging.destroy();
-  const ctx = document.getElementById('chart-aging').getContext('2d');
+  const _canvAging = document.getElementById('chart-aging');
+  if (!_canvAging) return;
+  const ctx = _canvAging.getContext('2d');
   _chartAging = new Chart(ctx, {
     type:'doughnut',
     data:{
