@@ -1570,7 +1570,9 @@ function carregarArquivoComparativo(file) {
       alert('Erro ao ler arquivo comparativo: ' + err.message);
     }
   };
-  if (file.name.toLowerCase().endsWith('.csv')) reader.readAsText(file, 'utf-8');
+  reader.onerror = () => { mostrarLoader(false); alert('Erro ao ler o arquivo comparativo. Verifique se ele não está aberto em outro programa.'); };
+  if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
+    reader.readAsText(file, 'utf-8');
   else reader.readAsArrayBuffer(file);
 }
 

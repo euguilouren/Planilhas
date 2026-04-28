@@ -720,7 +720,7 @@ class AnalistaFinanceiro:
 
         def _faixa(d):
             if pd.isna(d): return 'Sem data'
-            if d < 0:       return 'A vencer'
+            if d <= 0:      return 'A vencer'
             if d <= faixa_atencao: return 'Vencido 1-30 dias'
             if d <= faixa_media:   return 'Vencido 31-60 dias'
             if d <= faixa_critica: return 'Vencido 61-90 dias'
