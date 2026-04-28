@@ -1874,7 +1874,7 @@ function renderAuditoria(lista) {
       <td>${esc(p.tipo)}</td><td>${esc(p.linha)}</td>
       <td>${esc(p.coluna)}</td><td>${esc(p.valor)}</td>
       <td>${esc(p.descricao)}</td>
-      <td><button onclick='confirmarAuditoria(${esc(JSON.stringify(key))})'
+      <td><button data-audit-key="${esc(key)}" onclick="confirmarAuditoria(this.dataset.auditKey)"
         style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap;${btnStyle}">${btnLabel}</button></td>
     </tr>`;
   }).join('');
@@ -2366,6 +2366,7 @@ function baixarTemplate() {
 }
 
 function exportarJSON() {
+  const _par = _ultimoPareto ?? calcularPareto(_dadosOriginais, _cols.entidade, _cols.valor);
   const obj = {
     arquivo:   _nomeArquivo,
     timestamp: new Date().toISOString(),
@@ -2373,7 +2374,7 @@ function exportarJSON() {
     auditoria: _ultimaAuditoria  ?? auditoria(_dadosOriginais, _cols),
     aging:     _ultimoAging      ?? calcularAging(_dadosOriginais, _cols.vencimento, _cols.valor),
     dre:       _ultimoDre        ?? construirDRE(_dadosOriginais, _cols.categoria, _cols.valor),
-    pareto:    _ultimoPareto     ?? calcularPareto(_dadosOriginais, _cols.entidade, _cols.valor),
+    pareto: _par ? { items: Array.from(_par), totalEntidades: _par.totalEntidades, totalGeral: _par.totalGeral } : null,
   };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)], {type:'application/json'}));

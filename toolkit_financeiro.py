@@ -388,6 +388,8 @@ class Auditor:
         if col_data not in df.columns:
             return inconsistencias
         datas = pd.to_datetime(df[col_data], errors='coerce', dayfirst=True)
+        if hasattr(datas.dtype, 'tz') and datas.dtype.tz is not None:
+            datas = datas.dt.tz_localize(None)
         hoje = pd.Timestamp.now()
         for idx, row in df[datas > hoje].iterrows():
             inconsistencias.append({
@@ -822,8 +824,8 @@ class AnalistaFinanceiro:
                 r[str(col)] = round(row[col], 2)
                 if i > 0:
                     anterior, atual = row[cols[i - 1]], row[col]
-                    r[f'Var_{cols[i-1]}→{col}_R$'] = round(atual - anterior, 2)
-                    r[f'Var_{cols[i-1]}→{col}_%']  = round((atual - anterior) / anterior * 100, 1) if anterior != 0 else 0
+                    r[f'Var_{cols[i-1]}_para_{col}_R$'] = round(atual - anterior, 2)
+                    r[f'Var_{cols[i-1]}_para_{col}_%']  = round((atual - anterior) / anterior * 100, 1) if anterior != 0 else 0
             result_rows.append(r)
         return pd.DataFrame(result_rows)
 
@@ -949,6 +951,9 @@ class AnalistaFinanceiro:
         if df_valid.empty:
             return pd.DataFrame()
 
+        # Strip timezone so resample works regardless of whether dates are tz-aware
+        if hasattr(df_valid['_data'].dtype, 'tz') and df_valid['_data'].dtype.tz is not None:
+            df_valid['_data'] = df_valid['_data'].dt.tz_localize(None)
         df_valid = df_valid.set_index('_data')
         chave_col = col_chave if col_chave in df_valid.columns else df_valid.columns[0]
 
@@ -1025,7 +1030,7 @@ class AnalistaComercial:
         total_geral             = agrupado['Total_RS'].sum()
         agrupado['Percentual']  = (agrupado['Total_RS'] / total_geral * 100).round(1)
         agrupado['Acumulado_%'] = agrupado['Percentual'].cumsum().round(1)
-        agrupado['Classe_Pareto'] = np.where(agrupado['Acumulado_%'] <= top_pct * 100, 'A (top)', 'B (demais)')
+        agrupado['Classe_Pareto'] = np.where(agrupado['Acumulado_%'] <= top_pct * 100, 'A', 'B')
         agrupado['Ranking'] = range(1, len(agrupado) + 1)
         return agrupado
 
@@ -1081,7 +1086,7 @@ class Util:
 
     @staticmethod
     def normalizar_cnpj_cpf(series: pd.Series) -> pd.Series:
-        return series.astype(str).str.replace(r'[.\-/\s]', '', regex=True).str.strip()
+        return series.astype(str).str.replace(r'[.()\-/\s]', '', regex=True).str.strip()
 
     @staticmethod
     def corrigir_encoding(series: pd.Series) -> pd.Series:
@@ -1242,7 +1247,7 @@ class PrestadorContas:
             linhas.append({
                 'Conta': conta, 'Saldo_Inicial': round(si, 2), 'Entradas': round(ent, 2),
                 'Saídas': round(sai, 2), 'Saldo_Final': round(sf, 2),
-                'Variação_%': round((sf - si) / si * 100, 1) if si != 0 else 0,
+                'Variação_%': round((sf - si) / si * 100, 1) if si != 0 else None,
             })
         linhas.append({
             'Conta': 'TOTAL GERAL',
@@ -1250,7 +1255,7 @@ class PrestadorContas:
             'Entradas': round(sum(d.get('entradas', 0) for d in contas.values()), 2),
             'Saídas':   round(sum(d.get('saidas', 0) for d in contas.values()), 2),
             'Saldo_Final': round(total_final, 2),
-            'Variação_%': round((total_final - total_inicial) / total_inicial * 100, 1) if total_inicial != 0 else 0,
+            'Variação_%': round((total_final - total_inicial) / total_inicial * 100, 1) if total_inicial != 0 else None,
         })
         return pd.DataFrame(linhas)
 
