@@ -1575,7 +1575,7 @@ function mostrarConfigColunas(headers, cols, erpDetectado) {
   const labels = {
     valor:'Valor (R$)', data:'Data de Emissão', vencimento:'Vencimento',
     entidade:'Cliente / Entidade', chave:'Chave (ID / NF)',
-    categoria:'Categoria / Histórico', tipo:'Tipo (C/D · Receita/Despesa)',
+    categoria:'Categoria / Histórico',
   };
 
   // ERP banner
@@ -1614,7 +1614,7 @@ function mostrarConfigColunas(headers, cols, erpDetectado) {
 
 function aplicarMapeamentoERP(erpKey) {
   // Zera todos os selects antes para não deixar valores de ERP anterior
-  ['valor','data','vencimento','entidade','chave','categoria','tipo'].forEach(t => {
+  ['valor','data','vencimento','entidade','chave','categoria'].forEach(t => {
     const s = document.getElementById(`sel-${t}`);
     if (s) s.value = '';
   });
@@ -1628,9 +1628,11 @@ function aplicarMapeamentoERP(erpKey) {
 }
 
 function lerColsSelecionadas() {
-  const tipos = ['valor','data','vencimento','entidade','chave','categoria','tipo'];
+  const tipos = ['valor','data','vencimento','entidade','chave','categoria'];
   const c = {};
   tipos.forEach(t => { c[t] = document.getElementById(`sel-${t}`)?.value || null; });
+  // tipo é detectado automaticamente pelo ERP/detectarColunas — não exposto na UI
+  c.tipo = _cols.tipo || null;
   return c;
 }
 
