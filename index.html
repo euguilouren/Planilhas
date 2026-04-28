@@ -176,17 +176,19 @@ function toNum(v) {
 function toDate(v) {
   if (!v) return null;
   if (v instanceof Date) return isNaN(v) ? null : v;
-  // Número serial do Excel
+  // Número serial do Excel — converter via UTC para evitar offset de fuso
   if (typeof v === 'number') {
-    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
-    return isNaN(d) ? null : d;
+    const ms = Math.round((v - 25569) * 86400 * 1000);
+    const u  = new Date(ms);
+    if (isNaN(u)) return null;
+    return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate());
   }
   const s = String(v).trim();
   // DD/MM/YYYY
   const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (br) {
     const d = new Date(+br[3], +br[2]-1, +br[1]);
-    if (d.getDate() !== +br[1] || d.getMonth() !== +br[2]-1) return null;
+    if (d.getFullYear() !== +br[3] || d.getMonth() !== +br[2]-1 || d.getDate() !== +br[1]) return null;
     return d;
   }
   // YYYY-MM-DD — parse as local to avoid UTC midnight → day-1 in UTC-3
@@ -265,7 +267,7 @@ function auditoria(dados, cols) {
     const nums = dados.map(r => toNum(r[cols.valor])).filter(n => !isNaN(n));
     if (nums.length > 4) {
       const media = nums.reduce((a,b)=>a+b,0) / nums.length;
-      const desvio = Math.sqrt(nums.map(n=>(n-media)**2).reduce((a,b)=>a+b,0)/nums.length);
+      const desvio = Math.sqrt(nums.map(n=>(n-media)**2).reduce((a,b)=>a+b,0)/(nums.length-1));
       const limSup = media + 3*desvio;
       const limInf = media - 3*desvio;
       dados.forEach((row, i) => {
@@ -326,8 +328,8 @@ function calcularAging(dados, colVenc, colValor) {
   if (!colVenc || !colValor) return null;
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const faixas = {
-    'A vencer':         { min:-Infinity, max:-1,  qtd:0, total:0 },
-    'Vencido 1-30d':    { min:0,         max:30,  qtd:0, total:0 },
+    'A vencer':         { min:-Infinity, max:0,   qtd:0, total:0 },
+    'Vencido 1-30d':    { min:1,         max:30,  qtd:0, total:0 },
     'Vencido 31-60d':   { min:31,        max:60,  qtd:0, total:0 },
     'Vencido 61-90d':   { min:61,        max:90,  qtd:0, total:0 },
     'Vencido +90d':     { min:91,        max:Infinity, qtd:0, total:0 },
@@ -338,14 +340,14 @@ function calcularAging(dados, colVenc, colValor) {
     const d = toDate(row[colVenc]);
     const v = toNum(row[colValor]);
     if (isNaN(v)) return;
-    if (!d) { faixas['Sem data'].qtd++; faixas['Sem data'].total += v; return; }
+    if (!d) { faixas['Sem data'].qtd++; faixas['Sem data'].total += Math.abs(v); return; }
     const d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const dias = Math.round((hoje - d0) / 86400000);
     if (isNaN(dias)) { faixas['Sem data'].qtd++; faixas['Sem data'].total += v; return; }
     for (const [nome, f] of Object.entries(faixas)) {
       if (nome === 'Sem data') continue;
       if (dias >= f.min && dias <= f.max) {
-        f.qtd++; f.total += v; break;
+        f.qtd++; f.total += Math.abs(v); break;
       }
     }
   });
@@ -402,7 +404,7 @@ const MAPA_DRE = [
   { linha:'(-) CMV/CPV',                termos:/CMV|CPV|CUSTO.*MERCADORIA|CUSTO.*PRODUTO|CUSTO.*VARI/ },
   { linha:'(-) Despesas Operacionais',  termos:/DESPESA.*(ADM|COMERCIAL|OPERACIONAL|GERAL)|SALARIO|ALUGUEL/ },
   { linha:'(-/+) Resultado Financeiro', termos:/FINANCEI|JUROS|CAMBIAL/ },
-  { linha:'(-) IR\/CSLL',              termos:/\bIR\b|IRPJ|CSLL|IMPOSTO.*RENDA|CONTRIBUI.*SOCIAL/ },
+  { linha:'(-) IR\/CSLL',              termos:/\bIR\b|IRPJ|IRRF|IRPF|CSLL|IMPOSTO.*RENDA|CONTRIBUI.*SOCIAL/ },
 ];
 
 function construirDRE(dados, colCat, colValor) {
@@ -489,13 +491,13 @@ function calcularKPIs(dados, cols) {
     const v    = toNum(r[colVal]);
     if (isNaN(v)) return;
     const tipo = String(r[colTipo] || r['Tipo'] || '').trim().toUpperCase();
-    if (/^(RECEITA|C|CR[EÉ]DITO|ENTRADA|1)$/.test(tipo)) { receita += v; nfRec++; }
-    else if (/^(DESPESA|D|D[EÉ]BITO|SA[IÍ]DA|2)$/.test(tipo)) { despesa += Math.abs(v); nfDesp++; }
+    if (/^(RECEITA|CR[EÉ]DITO|ENTRADA)$/.test(tipo) || /RECEI|ENTRA|CRÉDI|VENDA|FATURAMENTO/.test(tipo)) { receita += v; nfRec++; }
+    else if (/^(DESPESA|D[EÉ]BITO|SA[IÍ]DA)$/.test(tipo) || /DESPE|SAÍDA|SAIDA|DÉBITO|DEBITO/.test(tipo)) { despesa += Math.abs(v); nfDesp++; }
     else if (v > 0) { receita += v; nfRec++; }
     else if (v < 0) { despesa += Math.abs(v); nfDesp++; }
   });
   const resultado = receita - despesa;
-  const margem    = receita !== 0 ? resultado / receita * 100 : 0;
+  const margem    = receita !== 0 ? resultado / receita * 100 : (despesa > 0 ? -100 : 0);
   const ticket    = nfRec   ? receita / nfRec : 0;
 
   return {
@@ -518,7 +520,7 @@ function calcularFluxoPeriodo(dados, colData, colValor, colTipo, freq) {
   const grupos = {};
   dados.forEach(r => {
     const d = toDate(r[colData]);
-    if (!d || isNaN(d)) return;
+    if (!d || isNaN(d.getTime())) return;
     let key;
     if (freq === 'D') key = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
     else if (freq === 'A') key = String(d.getFullYear());
@@ -526,10 +528,10 @@ function calcularFluxoPeriodo(dados, colData, colValor, colTipo, freq) {
 
     if (!grupos[key]) grupos[key] = { rec:0, desp:0, nfRec:0, nfDesp:0 };
     const v    = toNum(r[colValor]);
-    if (isNaN(v)) return;
+    if (isNaN(v) || v === 0) return;
     const tipo = colTipo ? String(r[colTipo] ?? '').trim().toUpperCase() : '';
-    const isRec = /^(RECEITA|C|CR[EÉ]DITO|ENTRADA|1)$/.test(tipo)
-      || (!/^(DESPESA|D|D[EÉ]BITO|SA[IÍ]DA|2)$/.test(tipo) && v > 0);
+    const isRec = /^(RECEITA|CR[EÉ]DITO|ENTRADA)$/.test(tipo) || /RECEI|ENTRA|CRÉDI|VENDA|FATURAMENTO/.test(tipo)
+      || (!(/^(DESPESA|D[EÉ]BITO|SA[IÍ]DA)$/.test(tipo) || /DESPE|SAÍDA|SAIDA|DÉBITO|DEBITO/.test(tipo)) && v > 0);
     if (isRec) { grupos[key].rec += v;  grupos[key].nfRec++; }
     else       { grupos[key].desp += Math.abs(v); grupos[key].nfDesp++; }
   });
@@ -1414,7 +1416,10 @@ dz.addEventListener('drop', e => {
   if (f) carregarArquivo(f);
 });
 document.getElementById('file-input').addEventListener('change', e => {
-  if (e.target.files[0]) carregarArquivo(e.target.files[0]);
+  if (e.target.files[0]) {
+    carregarArquivo(e.target.files[0]);
+    e.target.value = '';
+  }
 });
 
 // ══════════════════════════════════════════════════════
@@ -1498,7 +1503,8 @@ function carregarArquivo(file) {
       alert('Erro ao ler o arquivo: ' + err.message);
     }
   };
-  if (file.name.toLowerCase().endsWith('.csv'))
+  reader.onerror = () => { mostrarLoader(false); alert('Erro ao ler o arquivo. Verifique se ele não está aberto em outro programa.'); };
+  if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
     reader.readAsText(file, 'utf-8');
   else
     reader.readAsArrayBuffer(file);
@@ -1564,7 +1570,9 @@ function carregarArquivoComparativo(file) {
       alert('Erro ao ler arquivo comparativo: ' + err.message);
     }
   };
-  if (file.name.toLowerCase().endsWith('.csv')) reader.readAsText(file, 'utf-8');
+  reader.onerror = () => { mostrarLoader(false); alert('Erro ao ler o arquivo comparativo. Verifique se ele não está aberto em outro programa.'); };
+  if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
+    reader.readAsText(file, 'utf-8');
   else reader.readAsArrayBuffer(file);
 }
 
@@ -1868,7 +1876,7 @@ function renderAuditoria(lista) {
       <td>${esc(p.tipo)}</td><td>${esc(p.linha)}</td>
       <td>${esc(p.coluna)}</td><td>${esc(p.valor)}</td>
       <td>${esc(p.descricao)}</td>
-      <td><button onclick='confirmarAuditoria(${esc(JSON.stringify(key))})'
+      <td><button data-audit-key="${esc(key)}" onclick="confirmarAuditoria(this.dataset.auditKey)"
         style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;font-weight:600;white-space:nowrap;${btnStyle}">${btnLabel}</button></td>
     </tr>`;
   }).join('');
@@ -2360,6 +2368,7 @@ function baixarTemplate() {
 }
 
 function exportarJSON() {
+  const _par = _ultimoPareto ?? calcularPareto(_dadosOriginais, _cols.entidade, _cols.valor);
   const obj = {
     arquivo:   _nomeArquivo,
     timestamp: new Date().toISOString(),
@@ -2367,7 +2376,7 @@ function exportarJSON() {
     auditoria: _ultimaAuditoria  ?? auditoria(_dadosOriginais, _cols),
     aging:     _ultimoAging      ?? calcularAging(_dadosOriginais, _cols.vencimento, _cols.valor),
     dre:       _ultimoDre        ?? construirDRE(_dadosOriginais, _cols.categoria, _cols.valor),
-    pareto:    _ultimoPareto     ?? calcularPareto(_dadosOriginais, _cols.entidade, _cols.valor),
+    pareto: _par ? { items: Array.from(_par), totalEntidades: _par.totalEntidades, totalGeral: _par.totalGeral } : null,
   };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)], {type:'application/json'}));

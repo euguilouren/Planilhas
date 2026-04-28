@@ -12,6 +12,8 @@ Execução:
 
 import os
 import sys
+import ssl
+import html as _html_mod
 import time
 import logging
 import smtplib
@@ -76,7 +78,7 @@ class AnalisadorClaudeAPI:
     def __init__(self, cfg: dict):
         self.cfg_api = cfg.get('claude_api', {})
         self.ativo   = self.cfg_api.get('ativo', False)
-        self.modelo  = self.cfg_api.get('modelo', 'claude-opus-4-5')
+        self.modelo  = self.cfg_api.get('modelo', 'claude-opus-4-7')
         self.max_tok = self.cfg_api.get('max_tokens', 1024)
         self._client = None
         self._system_prompt = ''
@@ -306,7 +308,7 @@ class ProcessadorArquivo:
             )
 
             df_auditoria  = Auditor.relatorio_auditoria(inconsistencias)
-            total_criticos = len(df_auditoria[df_auditoria['Severidade'] == Status.CRITICA]) if len(df_auditoria) else 0
+            total_criticos = len(df_auditoria[df_auditoria['Severidade'] == str(Status.CRITICA)]) if len(df_auditoria) else 0
             resultado['criticos']        = total_criticos
             resultado['total_problemas'] = len(df_auditoria)
             logger.info("      %d problemas (%d críticos)", len(df_auditoria), total_criticos)
@@ -829,8 +831,10 @@ class ProcessadorArquivo:
 
             # Corpo do e-mail
             criticos_html = ''
-            for _, r in df_audit[df_audit['Severidade'] == Status.CRITICA].head(10).iterrows():
-                criticos_html += f"<li><b>{r.get('Tipo','')}</b> — {r.get('Descrição','')}</li>"
+            for _, r in df_audit[df_audit['Severidade'] == str(Status.CRITICA)].head(10).iterrows():
+                tipo = _html_mod.escape(str(r.get('Tipo', '')))
+                desc = _html_mod.escape(str(r.get('Descrição', '')))
+                criticos_html += f"<li><b>{tipo}</b> — {desc}</li>"
 
             corpo = f"""
 <h2>Alerta Automático — Toolkit Financeiro</h2>
@@ -854,7 +858,7 @@ class ProcessadorArquivo:
             for tentativa in range(1, max_tentativas + 1):
                 try:
                     with smtplib.SMTP(smtp, porta, timeout=10) as server:
-                        server.starttls()
+                        server.starttls(context=ssl.create_default_context())
                         server.login(rem, senha)
                         server.sendmail(rem, dests, msg.as_string())
                     logger.info("E-mail de alerta enviado para %s", dests)

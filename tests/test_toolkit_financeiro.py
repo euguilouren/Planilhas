@@ -484,8 +484,7 @@ class TestEdgeCasesVazios:
         — nunca produzir resultado silenciosamente incorreto."""
         df = pd.DataFrame({'Valor': [100.0, 200.0]})
         with pytest.raises((KeyError, ValueError, TypeError)):
-            resultado = AnalistaFinanceiro.calcular_aging(df, 'Vencimento', 'Valor')
-            assert isinstance(resultado, pd.DataFrame)
+            AnalistaFinanceiro.calcular_aging(df, 'Vencimento', 'Valor')
 
 
 class TestInconsistenciasTemporais:

@@ -125,18 +125,18 @@ tr:hover td{{background:#F9FAFB}}
 <div class="kpi-grid">
   <div class="kpi receita">
     <div class="label">Receitas</div>
-    <div class="valor" style="color:#065F46">R$ {kpis['receita_total']:,.2f}</div>
+    <div class="valor" style="color:#065F46">{_fmt_brl(kpis['receita_total'])}</div>
     <div class="sub">{kpis['nf_receita']} NFs vendidas</div>
   </div>
   <div class="kpi despesa">
     <div class="label">Despesas</div>
-    <div class="valor" style="color:#991B1B">R$ {kpis['despesa_total']:,.2f}</div>
+    <div class="valor" style="color:#991B1B">{_fmt_brl(kpis['despesa_total'])}</div>
     <div class="sub">{kpis['nf_despesa']} NFs recebidas</div>
   </div>
   <div class="kpi resultado">
     <div class="label">Resultado Líquido</div>
     <div class="valor" style="color:{'#065F46' if kpis['resultado']>=0 else '#991B1B'}">
-      R$ {kpis['resultado']:,.2f}</div>
+      {_fmt_brl(kpis['resultado'])}</div>
     <div class="sub">Margem: {kpis['margem']:.1f}%</div>
   </div>
   <div class="kpi">
@@ -146,7 +146,7 @@ tr:hover td{{background:#F9FAFB}}
   </div>
   <div class="kpi">
     <div class="label">Ticket Médio (Rec.)</div>
-    <div class="valor">R$ {kpis['ticket_medio']:,.2f}</div>
+    <div class="valor">{_fmt_brl(kpis['ticket_medio'])}</div>
     <div class="sub">por NF de receita</div>
   </div>
   <div class="kpi">
@@ -184,6 +184,16 @@ tr:hover td{{background:#F9FAFB}}
 
 def _esc(v) -> str:
     return html.escape(str(v) if v is not None else '')
+
+
+def _fmt_brl(val, dec: int = 2) -> str:
+    try:
+        v = float(val)
+        us = f"{abs(v):,.{dec}f}"
+        br = us.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return f"R$ {'-' if v < 0 else ''}{br}"
+    except (ValueError, TypeError):
+        return '—'
 
 
 def _calcular_kpis(df: pd.DataFrame, df_mensal: pd.DataFrame | None) -> dict:
@@ -287,24 +297,24 @@ def _tabela_fluxo(df: pd.DataFrame | None) -> str:
         rows += (
             f"<tr style='background:{cor}'>"
             f"<td style='font-weight:600'>{_esc(str(r['Periodo']))}</td>"
-            f"<td style='text-align:right;color:#065F46'>R$ {float(r['Receita_RS']):,.2f}</td>"
+            f"<td style='text-align:right;color:#065F46'>{_fmt_brl(r['Receita_RS'])}</td>"
             f"<td style='text-align:center'>{int(r['NFs_Receita'])}</td>"
-            f"<td style='text-align:right;color:#991B1B'>R$ {float(r['Despesa_RS']):,.2f}</td>"
+            f"<td style='text-align:right;color:#991B1B'>{_fmt_brl(r['Despesa_RS'])}</td>"
             f"<td style='text-align:center'>{int(r['NFs_Despesa'])}</td>"
             f"<td style='text-align:right;font-weight:bold;color:{'#065F46' if res>=0 else '#991B1B'}'>"
-            f"R$ {res:,.2f}</td>"
+            f"{_fmt_brl(res)}</td>"
             f"<td style='text-align:center'>{pct_str}</td></tr>"
         )
     cor_tot = '#D1FAE5' if tot_res >= 0 else '#FEE2E2'
     rows += (
         f"<tr style='background:{cor_tot};font-weight:bold;border-top:2px solid #1A3556'>"
         f"<td>TOTAL</td>"
-        f"<td style='text-align:right;color:#065F46'>R$ {tot_rec:,.2f}</td>"
+        f"<td style='text-align:right;color:#065F46'>{_fmt_brl(tot_rec)}</td>"
         f"<td style='text-align:center'>—</td>"
-        f"<td style='text-align:right;color:#991B1B'>R$ {tot_desp:,.2f}</td>"
+        f"<td style='text-align:right;color:#991B1B'>{_fmt_brl(tot_desp)}</td>"
         f"<td style='text-align:center'>—</td>"
         f"<td style='text-align:right;color:{'#065F46' if tot_res>=0 else '#991B1B'}'>"
-        f"R$ {tot_res:,.2f}</td><td></td></tr>"
+        f"{_fmt_brl(tot_res)}</td><td></td></tr>"
     )
     return f"""<div style="overflow-x:auto">
 <table>
@@ -340,6 +350,10 @@ def _secao_fluxo_tabs(df_d, df_m, df_a) -> str:
 </div>"""
 
 
+_TOTAIS_DRE = {'(=) Receita Líquida', '(=) Lucro Bruto', '(=) Resultado Operacional (EBIT)',
+               '(=) Resultado antes IR/CSLL', '(=) Lucro Líquido', '(=) EBIT (Resultado Operacional)'}
+
+
 def _secao_dre(df: pd.DataFrame | None) -> str:
     if df is None or len(df) == 0:
         return ''
@@ -349,13 +363,13 @@ def _secao_dre(df: pd.DataFrame | None) -> str:
         val   = float(r.get('Valor_RS', 0))
         av    = r.get('AV_%', '')
         nivel = str(r.get('Nivel', '')).strip()
-        is_total = 'TOTAL' in linha.upper() or 'LUCRO' in linha.upper() or 'RESULTADO' in linha.upper()
+        is_total = linha in _TOTAIS_DRE
         peso = 'font-weight:bold' if is_total else ''
         cor_v = '#065F46' if val >= 0 else '#991B1B'
         indent = 'padding-left:24px' if nivel == '2' else ''
         rows += (
             f"<tr><td style='{peso};{indent}'>{linha}</td>"
-            f"<td style='text-align:right;{cor_v};{peso}'>R$ {val:,.2f}</td>"
+            f"<td style='text-align:right;{cor_v};{peso}'>{_fmt_brl(val)}</td>"
             f"<td style='text-align:center'>{_esc(str(av)) if av != '' else '—'}</td></tr>"
         )
     return f"""
@@ -389,7 +403,7 @@ def _secao_pareto(df: pd.DataFrame | None) -> str:
         rows += (
             f"<tr><td style='text-align:center'>{rank}</td>"
             f"<td>{nome}</td>"
-            f"<td style='text-align:right;color:#065F46'>R$ {val:,.2f}</td>"
+            f"<td style='text-align:right;color:#065F46'>{_fmt_brl(val)}</td>"
             f"<td style='text-align:right'>{pct:.1f}%</td>"
             f"<td style='text-align:right'>{acum:.1f}%</td>"
             f"<td><span style='color:{cor_cls};font-weight:bold'>{classe}</span></td>"

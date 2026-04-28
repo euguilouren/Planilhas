@@ -144,9 +144,9 @@ class GeradorHTML:
       <div class="valor" aria-live="polite">{total_registros:,}</div>
       <div class="sub">{arquivo_origem}</div>
     </div>
-    <div class="kpi" role="article" aria-label="Total geral em reais: {total_valor:,.0f}">
+    <div class="kpi" role="article" aria-label="Total geral em reais: {total_valor:.0f}">
       <div class="label">Total Geral (R$)</div>
-      <div class="valor" aria-live="polite">R$ {total_valor:,.0f}</div>
+      <div class="valor" aria-live="polite">{self._fmt_brl(total_valor, 0)}</div>
       <div class="sub">soma da coluna {self._esc(col_valor)}</div>
     </div>
     <div class="kpi {kpi_critico_class}" role="article" aria-label="Problemas críticos: {total_criticos}">
@@ -211,6 +211,16 @@ class GeradorHTML:
             return ''
         return html.escape(str(val))
 
+    @staticmethod
+    def _fmt_brl(val, dec: int = 2) -> str:
+        try:
+            v = float(val)
+            us = f"{abs(v):,.{dec}f}"
+            br = us.replace(',', 'X').replace('.', ',').replace('X', '.')
+            return f"R$ {'-' if v < 0 else ''}{br}"
+        except (ValueError, TypeError):
+            return '—'
+
     def _badge(self, sev: str) -> str:
         cls = {'CRÍTICA': 'critica', 'ALTA': 'alta', 'MÉDIA': 'media',
                'BAIXA': 'baixa', 'OK': 'ok'}.get(sev.upper(), 'media')
@@ -265,7 +275,15 @@ class GeradorHTML:
             else:
                 linha = str(raw)
             imp = r.get('Impacto R$', '')
-            imp_str = f"R$ {float(imp):,.2f}" if imp and str(imp) not in ('', '0', '0.0') else '—'
+            try:
+                imp_val = float(imp)
+                imp_str = f"R$ {imp_val:_.2f}".replace('_', '.').replace('.', ',', 1) if imp and str(imp) not in ('', '0', '0.0') else '—'
+                if imp_str != '—':
+                    # Formato pt-BR: ponto como separador de milhar, vírgula como decimal
+                    parts = f"{imp_val:,.2f}".split('.')
+                    imp_str = 'R$ ' + parts[0].replace(',', '.') + ',' + parts[1]
+            except (ValueError, TypeError):
+                imp_str = '—'
             rows += (f"<tr><td>{self._badge(sev)}</td>"
                      f"<td>{self._esc(r.get('Tipo',''))}</td>"
                      f"<td>{self._esc(linha)}</td>"
@@ -303,12 +321,12 @@ class GeradorHTML:
                 bar_cls = 'bar-critico'
             bar = f'<div class="bar-wrap"><div class="bar {bar_cls}" style="width:{min(pct,100):.1f}%"></div></div>'
             rows += (f"<tr><td>{self._esc(faixa)}</td><td style='text-align:right'>{qtd}</td>"
-                     f"<td style='text-align:right'>R$ {tot:,.2f}</td>"
+                     f"<td style='text-align:right'>{self._fmt_brl(tot)}</td>"
                      f"<td style='text-align:right'>{pct:.1f}%</td>"
                      f"<td style='width:180px'>{bar}</td></tr>")
         return f"""
   <section class="card" role="region" aria-label="Aging de recebíveis">
-    <h2>📅 Aging de Recebíveis — Total: R$ {total:,.2f}</h2>
+    <h2>📅 Aging de Recebíveis — Total: {self._fmt_brl(total)}</h2>
     <table role="table" aria-label="Distribuição do aging por faixa de vencimento">
       <thead><tr>
         <th scope="col">Faixa</th><th scope="col" style="text-align:right">Qtd</th>
@@ -327,10 +345,10 @@ class GeradorHTML:
             linha = str(r.get('Linha_DRE', ''))
             valor = float(r.get('Valor_RS', 0))
             av    = f"{float(r['AV_%']):.1f}%" if 'AV_%' in r and pd.notna(r.get('AV_%')) else ''
-            cls   = 'dre-total' if linha in totais else ('dre-sub' if linha.startswith('(-)') else '')
+            cls   = 'dre-total' if linha in totais else ('dre-sub' if (linha.startswith('(-)') or linha.startswith('(-/+)')) else '')
             cor   = '#C0392B' if valor < 0 and linha in totais else ''
             rows += (f"<tr class='{cls}'><td>{self._esc(linha)}</td>"
-                     f"<td style='text-align:right;color:{cor}'>R$ {valor:,.2f}</td>"
+                     f"<td style='text-align:right;color:{cor}'>{self._fmt_brl(valor)}</td>"
                      f"<td style='text-align:right;color:#888'>{av}</td></tr>")
         return f"""
   <section class="card" role="region" aria-label="DRE — Demonstrativo de Resultado">
@@ -357,7 +375,7 @@ class GeradorHTML:
             bar = f'<div class="bar-wrap"><div class="bar" style="width:{pct_bar:.1f}%;background:{cor_cls}"></div></div>'
             rows += (f"<tr><td style='text-align:center'>{int(r.get('Ranking',0))}</td>"
                      f"<td>{self._esc(r[col_ent])}</td>"
-                     f"<td style='text-align:right'>R$ {float(r.get('Total_RS',0)):,.2f}</td>"
+                     f"<td style='text-align:right'>{self._fmt_brl(r.get('Total_RS', 0))}</td>"
                      f"<td style='text-align:right'>{float(r.get('Percentual',0)):.1f}%</td>"
                      f"<td style='text-align:right'>{float(r.get('Acumulado_%',0)):.1f}%</td>"
                      f"<td><span style='color:{cor_cls};font-weight:bold'>{classe}</span></td>"
@@ -394,24 +412,24 @@ class GeradorHTML:
                 rows += (
                     f"<tr style='background:{cor}'>"
                     f"<td style='font-weight:600'>{self._esc(str(r['Periodo']))}</td>"
-                    f"<td style='text-align:right;color:#065F46'>R$ {float(r['Receita_RS']):,.2f}</td>"
+                    f"<td style='text-align:right;color:#065F46'>{self._fmt_brl(r['Receita_RS'])}</td>"
                     f"<td style='text-align:center'>{int(r['NFs_Receita'])}</td>"
-                    f"<td style='text-align:right;color:#991B1B'>R$ {float(r['Despesa_RS']):,.2f}</td>"
+                    f"<td style='text-align:right;color:#991B1B'>{self._fmt_brl(r['Despesa_RS'])}</td>"
                     f"<td style='text-align:center'>{int(r['NFs_Despesa'])}</td>"
                     f"<td style='text-align:right;font-weight:bold;color:{'#065F46' if res>=0 else '#991B1B'}'>"
-                    f"R$ {res:,.2f}</td>"
+                    f"{self._fmt_brl(res)}</td>"
                     f"<td style='text-align:center'>{pct_str}</td></tr>"
                 )
             cor_tot = '#D1FAE5' if tot_res >= 0 else '#FEE2E2'
             rows += (
                 f"<tr style='background:{cor_tot};font-weight:bold;border-top:2px solid #1A3556'>"
                 f"<td>TOTAL</td>"
-                f"<td style='text-align:right;color:#065F46'>R$ {tot_rec:,.2f}</td>"
+                f"<td style='text-align:right;color:#065F46'>{self._fmt_brl(tot_rec)}</td>"
                 f"<td style='text-align:center'>—</td>"
-                f"<td style='text-align:right;color:#991B1B'>R$ {tot_desp:,.2f}</td>"
+                f"<td style='text-align:right;color:#991B1B'>{self._fmt_brl(tot_desp)}</td>"
                 f"<td style='text-align:center'>—</td>"
                 f"<td style='text-align:right;color:{'#065F46' if tot_res>=0 else '#991B1B'}'>"
-                f"R$ {tot_res:,.2f}</td><td></td></tr>"
+                f"{self._fmt_brl(tot_res)}</td><td></td></tr>"
             )
             return f"""<div style="overflow-x:auto">
 <table role="table">

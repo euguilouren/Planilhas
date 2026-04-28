@@ -120,7 +120,7 @@ def test_enviar_email_smtp_timeout_configurado(config_basico):
 
         def __enter__(self): return self
         def __exit__(self, *a): return False
-        def starttls(self): pass
+        def starttls(self, **kwargs): pass
         def login(self, *a): pass
         def sendmail(self, *a): pass
 
