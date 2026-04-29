@@ -314,7 +314,7 @@ class TestAnalistaFinanceiro:
             thresholds={'lc_min': 2.0},  # LC = 1.5, abaixo do limite 2.0
         )
         lc = df[df['Indicador'] == 'Liquidez Corrente']
-        assert lc.iloc[0]['Status'] != 'SAUDÁVEL'
+        assert lc.iloc[0]['Status'] == 'CRÍTICO'
 
 
 # ── AnalistaComercial ─────────────────────────────────────────────

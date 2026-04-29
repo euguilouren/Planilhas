@@ -134,7 +134,12 @@ class AnalisadorClaudeAPI:
                 }],
                 messages=[{"role": "user", "content": briefing}],
             )
-            return resposta.content[0].text
+            if not resposta.content:
+                return ''
+            for bloco in resposta.content:
+                if getattr(bloco, 'type', None) == 'text':
+                    return bloco.text
+            return ''
         except _anthropic.AuthenticationError as e:
             logger.error("Claude API: chave inválida — %s", e)
         except _anthropic.RateLimitError as e:
@@ -828,6 +833,7 @@ class ProcessadorArquivo:
                 return
 
             assunto = f"{cfg_email.get('assunto_prefixo','[Toolkit]')} {resultado['total_problemas']} alertas — {Path(resultado['arquivo_origem']).name}"
+            assunto = assunto.replace('\r', ' ').replace('\n', ' ')
 
             # Corpo do e-mail
             criticos_html = ''
@@ -896,6 +902,7 @@ class ObservadorPasta:
         self.pasta       = Path(pasta)
         self.pasta.mkdir(parents=True, exist_ok=True)
         self._vistos: set = set()
+        self._estados_pendentes: dict = {}  # arquivo.name → (size, mtime)
 
     def varrer_uma_vez(self):
         """Verifica a pasta e processa arquivos ainda não processados."""
@@ -909,6 +916,15 @@ class ObservadorPasta:
                 continue
             if arquivo.suffix.lower() in ProcessadorArquivo.EXTENSOES_SUPORTADAS:
                 if arquivo.name not in self._vistos:
+                    # Verifica estabilidade: aguarda o arquivo parar de ser copiado
+                    try:
+                        estado_atual = (arquivo.stat().st_size, arquivo.stat().st_mtime)
+                    except OSError:
+                        continue
+                    if self._estados_pendentes.get(arquivo.name) != estado_atual:
+                        self._estados_pendentes[arquivo.name] = estado_atual
+                        continue  # ainda sendo copiado — tenta na próxima varredura
+                    self._estados_pendentes.pop(arquivo.name, None)
                     # Marca como visto antes de processar para evitar loop infinito.
                     # Para reprocessar, renomeie ou reimporte o arquivo.
                     self._vistos.add(arquivo.name)

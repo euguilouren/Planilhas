@@ -61,8 +61,8 @@ const MAPAS_ERP_JS = {
   ALTERDATA:     { sinais:['nr_lancamento','vl_lancamento','dt_lancamento'], mapa:{'nr_lancamento':'chave','vl_lancamento':'valor','dt_lancamento':'data','dt_vencimento':'vencimento','nm_cliente':'entidade','ds_historico':'categoria'} },
   LINX:          { sinais:['COD_NF','VL_TOTAL','NM_CLIENTE'],          mapa:{'COD_NF':'chave','VL_TOTAL':'valor','DT_EMISSAO':'data','DT_VENCIMENTO':'vencimento','NM_CLIENTE':'entidade'} },
   MEGA:          { sinais:['num_doc','vl_doc','nm_parceiro'],           mapa:{'num_doc':'chave','vl_doc':'valor','dt_doc':'data','dt_vencto':'vencimento','nm_parceiro':'entidade'} },
-  NIBO:          { sinais:['data_pagamento','valor','categoria'],       mapa:{'valor':'valor','data_pagamento':'data','data_vencimento':'vencimento','categoria':'categoria','descricao':'chave'} },
-  GRANATUM:      { sinais:['data_vencimento','valor','categoria'],      mapa:{'valor':'valor','data_pagamento':'data','data_vencimento':'vencimento','categoria':'categoria','descricao':'chave'} },
+  NIBO:          { sinais:['data_pagamento','valor','categoria'],       mapa:{'valor':'valor','data_pagamento':'data','data_vencimento':'vencimento','categoria':'categoria'} },
+  GRANATUM:      { sinais:['data_vencimento','valor','categoria'],      mapa:{'valor':'valor','data_pagamento':'data','data_vencimento':'vencimento','categoria':'categoria'} },
   CONTA_AZUL:    { sinais:['Emissão','Vencimento','Cliente/Fornecedor'], mapa:{'Número':'chave','Valor':'valor','Emissão':'data','Vencimento':'vencimento','Cliente/Fornecedor':'entidade','Categoria':'categoria'} },
   BLING:         { sinais:['numero','contato','situacao'],              mapa:{'numero':'chave','valor':'valor','data':'data','vencimento':'vencimento','contato':'entidade','categoria':'categoria'} },
   TINY:          { sinais:['numero_nota','nome_cliente','valor_nota'],  mapa:{'numero_nota':'chave','valor_nota':'valor','data_emissao':'data','data_vencimento':'vencimento','nome_cliente':'entidade'} },
@@ -169,8 +169,22 @@ function calcularIntegridade(dados, cols, kpis, dre, pareto) {
 function toNum(v) {
   if (v === null || v === undefined || v === '') return NaN;
   if (typeof v === 'number') return v;
-  const s = String(v).replace(/R\$\s?/g,'').replace(/\./g,'').replace(',','.').trim();
-  return parseFloat(s);
+  let s = String(v).replace(/R\$\s?/g,'').trim();
+  // Parênteses contábeis: (1.500,00) → -1500
+  const neg = s.startsWith('(') && s.endsWith(')');
+  if (neg) s = s.slice(1, -1).trim();
+  if (s.includes(',') && s.includes('.')) {
+    // Ambos presentes: quem vier por último é o separador decimal
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replace(/\./g, '').replace(',', '.'); // PT-BR: 1.234,56
+    } else {
+      s = s.replace(/,/g, '');                   // US:    1,234.56
+    }
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.'); // só vírgula → decimal BR
+  }
+  const result = parseFloat(s);
+  return neg ? -result : result;
 }
 
 function toDate(v) {
@@ -343,7 +357,7 @@ function calcularAging(dados, colVenc, colValor) {
     if (!d) { faixas['Sem data'].qtd++; faixas['Sem data'].total += Math.abs(v); return; }
     const d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const dias = Math.round((hoje - d0) / 86400000);
-    if (isNaN(dias)) { faixas['Sem data'].qtd++; faixas['Sem data'].total += v; return; }
+    if (isNaN(dias)) { faixas['Sem data'].qtd++; faixas['Sem data'].total += Math.abs(v); return; }
     for (const [nome, f] of Object.entries(faixas)) {
       if (nome === 'Sem data') continue;
       if (dias >= f.min && dias <= f.max) {
@@ -402,7 +416,7 @@ const MAPA_DRE = [
   { linha:'Receita Bruta',              termos:/RECEITA|VENDA|FATURAMENTO/ },
   { linha:'(-) Deduções',               termos:/DEDU[CÇ]|IMPOSTO.*VENDA|DEVOLU|ABATIMENTO|PIS|COFINS|ISS|ICMS/ },
   { linha:'(-) CMV/CPV',                termos:/CMV|CPV|CUSTO.*MERCADORIA|CUSTO.*PRODUTO|CUSTO.*VARI/ },
-  { linha:'(-) Despesas Operacionais',  termos:/DESPESA.*(ADM|COMERCIAL|OPERACIONAL|GERAL)|SALARIO|ALUGUEL/ },
+  { linha:'(-) Despesas Operacionais',  termos:/DESPESA|GASTO|CUSTO[\s_]FIX|FOLHA|PAGAMENTO|SALARIO|ALUGUEL|MARKETING|ENERGIA|TELEFONE|INTERNET|MATERIAL|MANUTENC/ },
   { linha:'(-/+) Resultado Financeiro', termos:/FINANCEI|JUROS|CAMBIAL/ },
   { linha:'(-) IR\/CSLL',              termos:/\bIR\b|IRPJ|IRRF|IRPF|CSLL|IMPOSTO.*RENDA|CONTRIBUI.*SOCIAL/ },
 ];
@@ -646,7 +660,7 @@ function calcularScoreFinanceiro(kpis, aging, pareto, auditProblemas) {
   // Inadimplência aging (25 pts)
   let ptsAging = 0, detalheAging = 'Sem dados (vencimento não mapeado)';
   if (aging && aging.length) {
-    const totalAging = aging.reduce((s,f) => s + f.total, 0);
+    const totalAging = aging.filter(f => f.faixa !== 'Sem data').reduce((s,f) => s + f.total, 0);
     const vencido = aging.filter(f => f.faixa !== 'A vencer' && f.faixa !== 'Sem data').reduce((s,f) => s + f.total, 0);
     const pct = totalAging > 0 ? vencido / totalAging * 100 : 0;
     ptsAging = pct === 0 ? 25 : pct < 10 ? 18 : pct < 25 ? 10 : 0;
@@ -657,7 +671,8 @@ function calcularScoreFinanceiro(kpis, aging, pareto, auditProblemas) {
   // Concentração Pareto (20 pts)
   let ptsPareto = 20, detalhePareto = 'Sem dados';
   if (pareto && pareto.length >= 3) {
-    const totalPos = pareto.filter(i => i.total > 0).reduce((s,i) => s + i.total, 0);
+    const totalPos = pareto.totalGeral > 0 ? pareto.totalGeral
+      : pareto.filter(i => i.total > 0).reduce((s,i) => s + i.total, 0);
     const top3 = pareto.slice(0,3).filter(i => i.total > 0).reduce((s,i) => s + i.total, 0);
     const pct = totalPos > 0 ? top3 / totalPos * 100 : 0;
     ptsPareto = pct < 40 ? 20 : pct < 60 ? 12 : pct < 80 ? 6 : 0;
@@ -1485,9 +1500,10 @@ function carregarArquivo(file) {
       if (file.name.toLowerCase().endsWith('.ofx')) {
         ({ headers, dados } = parseOFX(e.target.result));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX.');
-      } else if (file.name.toLowerCase().endsWith('.csv')) {
+      } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
         const txt   = e.target.result;
-        const wb    = XLSX.read(txt, { type:'string', raw:false });
+        const sep   = file.name.toLowerCase().endsWith('.tsv') ? '\t' : undefined;
+        const wb    = XLSX.read(txt, { type:'string', raw:false, FS: sep });
         const ws    = wb.Sheets[wb.SheetNames[0]];
         const arr   = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
         if (!arr.length || !arr[0]) throw new Error('Arquivo vazio ou sem cabeçalho.');
@@ -1533,6 +1549,8 @@ function carregarArquivo(file) {
       _cols            = detectarColunas(headers);
       _erpDetectado    = detectarERP(headers);
       _auditConfirmados.clear();
+      _ultimosKpis = _ultimaAuditoria = _ultimoAging = _ultimoDre = _ultimoPareto = null;
+      _ultimaAnaliseClaude = '';
       _colsComparativos = null;
       _kpisComparativos = null;
       _nomeArquivoComp  = '';
@@ -1581,8 +1599,9 @@ function carregarArquivoComparativo(file) {
       if (file.name.toLowerCase().endsWith('.ofx')) {
         ({ headers, dados } = parseOFX(e.target.result));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX comparativo.');
-      } else if (file.name.toLowerCase().endsWith('.csv')) {
-        const wb  = XLSX.read(e.target.result, { type:'string', raw:false });
+      } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
+        const sep = file.name.toLowerCase().endsWith('.tsv') ? '\t' : undefined;
+        const wb  = XLSX.read(e.target.result, { type:'string', raw:false, FS: sep });
         const ws  = wb.Sheets[wb.SheetNames[0]];
         const arr = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
         if (!arr.length || !arr[0]) throw new Error('Arquivo comparativo vazio ou sem cabeçalho.');
@@ -1864,7 +1883,7 @@ function renderVerificacao(integ) {
     const como = c.como
       ? `<div class="check-como"><strong>Como investigar:</strong> ${esc(c.como)}</div>`
       : '';
-    return `<div class="check-item">${como}<span class="${cls}">${c.status} — ${c.nome}: ${c.detalhe}</span></div>`;
+    return `<div class="check-item">${como}<span class="${cls}">${esc(c.status)} — ${esc(c.nome)}: ${esc(c.detalhe)}</span></div>`;
   }).join('');
 
   cont.innerHTML = `
@@ -2329,7 +2348,8 @@ async function analisarComClaude(btn) {
       throw new Error(msg);
     }
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
+    if (!data) throw new Error('Resposta inválida da API Claude.');
     _ultimaAnaliseClaude = data.content?.[0]?.text || '(sem resposta)';
     texto.innerHTML      = _markdownParaHTML(_ultimaAnaliseClaude);
     resultado.style.display = 'block';

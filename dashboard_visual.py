@@ -8,7 +8,7 @@ from __future__ import annotations
 import html
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -45,7 +45,7 @@ class GeradorDashboard:
         cfg = config or {}
         empresa = _esc(cfg.get('relatorio', {}).get('empresa', 'Empresa'))
         titulo  = _esc(cfg.get('relatorio', {}).get('titulo', 'Dashboard Financeiro'))
-        agora   = datetime.now(tz=timezone.utc).strftime('%d/%m/%Y %H:%M')
+        agora   = datetime.now().strftime('%d/%m/%Y %H:%M')
         arquivo = _esc(Path(arquivo_origem).name)
 
         kpis = _calcular_kpis(df_dados, df_fluxo_mensal)
@@ -234,7 +234,7 @@ def _montar_chart_data(df_mensal: pd.DataFrame | None) -> dict:
         return {'labels': [], 'receitas': [], 'despesas': [], 'resultados': []}
     df = df_mensal.tail(24)  # últimos 24 períodos
     return {
-        'labels':     df['Periodo'].tolist(),
+        'labels':     [str(p) for p in df['Periodo']],
         'receitas':   [round(float(v), 2) for v in df['Receita_RS']],
         'despesas':   [round(float(v), 2) for v in df['Despesa_RS']],
         'resultados': [round(float(v), 2) for v in df['Resultado_RS']],
@@ -254,7 +254,7 @@ def _secao_grafico(chart_data: dict) -> str:
 def _js_grafico(chart_data: dict) -> str:
     if not chart_data['labels']:
         return ''
-    data_json = json.dumps(chart_data, ensure_ascii=False)
+    data_json = json.dumps(chart_data, ensure_ascii=False).replace('</', '<\\/')
     return f"""
 (function(){{
   var d = {data_json};
@@ -389,6 +389,8 @@ def _secao_pareto(df: pd.DataFrame | None) -> str:
         return ''
     col_ent = df.columns[0]
     max_val = float(df['Total_RS'].max()) if len(df) else 1
+    if not max_val or pd.isna(max_val):
+        max_val = 1
     rows = ''
     for _, r in df.head(15).iterrows():
         nome    = _esc(str(r[col_ent]))
