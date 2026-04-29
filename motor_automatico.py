@@ -860,13 +860,22 @@ class ProcessadorArquivo:
             msg['To']      = ', '.join(dests)
             msg.attach(MIMEText(corpo, 'html'))
 
+            # Port 465 = SMTP_SSL (implicit TLS); port 587/25 = STARTTLS
+            use_ssl = (porta == 465)
+            ctx = ssl.create_default_context()
+
             max_tentativas = 3
             for tentativa in range(1, max_tentativas + 1):
                 try:
-                    with smtplib.SMTP(smtp, porta, timeout=10) as server:
-                        server.starttls(context=ssl.create_default_context())
-                        server.login(rem, senha)
-                        server.sendmail(rem, dests, msg.as_string())
+                    if use_ssl:
+                        with smtplib.SMTP_SSL(smtp, porta, context=ctx, timeout=10) as server:
+                            server.login(rem, senha)
+                            server.sendmail(rem, dests, msg.as_string())
+                    else:
+                        with smtplib.SMTP(smtp, porta, timeout=10) as server:
+                            server.starttls(context=ctx)
+                            server.login(rem, senha)
+                            server.sendmail(rem, dests, msg.as_string())
                     logger.info("E-mail de alerta enviado para %s", dests)
                     return
                 except smtplib.SMTPAuthenticationError as e:
@@ -907,6 +916,14 @@ class ObservadorPasta:
     def varrer_uma_vez(self):
         """Verifica a pasta e processa arquivos ainda não processados."""
         pasta_real = self.pasta.resolve()
+        # Clean up _estados_pendentes for files that no longer exist
+        arquivos_atuais = {
+            f.name for f in self.pasta.iterdir()
+            if f.suffix.lower() in ProcessadorArquivo.EXTENSOES_SUPORTADAS
+        }
+        for nome in list(self._estados_pendentes):
+            if nome not in arquivos_atuais:
+                del self._estados_pendentes[nome]
         for arquivo in self.pasta.iterdir():
             try:
                 # Bloqueia symlinks que apontam para fora da pasta monitorada
