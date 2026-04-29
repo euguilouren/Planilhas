@@ -81,7 +81,7 @@ jobs:
       - name: Executar pip-audit
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt --format=markdown || true
+          pip-audit -r requirements.txt --format=markdown
 
   validate-deploy-script:
     name: Validar pipeline de obfuscação

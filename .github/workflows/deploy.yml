@@ -31,6 +31,9 @@ jobs:
       - name: Copiar assets PWA
         run: cp manifest.json dist/manifest.json && cp sw.js dist/sw.js
 
+      - name: Bump SW cache version
+        run: sed -i "s/pfp-v[0-9]*/pfp-v${{ github.run_number }}/" dist/sw.js
+
       - name: Verificar resultado
         run: |
           python3 -c "

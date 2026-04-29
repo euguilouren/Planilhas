@@ -69,7 +69,7 @@ class GeradorHTML:
         total_criticos = len(df_auditoria[df_auditoria['Severidade'] == 'CRÍTICA']) if len(df_auditoria) else 0
         total_problemas = len(df_auditoria)
 
-        html = f"""<!DOCTYPE html>
+        html_content = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -137,7 +137,7 @@ class GeradorHTML:
         # ── KPIs ──────────────────────────────────────────────────
         kpi_critico_class = 'critico' if total_criticos > 0 else 'ok'
         kpi_prob_class    = 'critico' if total_criticos > 0 else ('ok' if total_problemas == 0 else '')
-        html += f"""
+        html_content +=f"""
   <section class="kpis" role="region" aria-label="Indicadores principais">
     <div class="kpi" role="article" aria-label="Total de registros: {total_registros:,}">
       <div class="label">Total de Registros</div>
@@ -163,13 +163,13 @@ class GeradorHTML:
 """
         # ── Diagnóstico de Formato ─────────────────────────────────
         if diagnostico and diagnostico.get('problemas_formato'):
-            html += self._secao_diagnostico(diagnostico)
+            html_content +=self._secao_diagnostico(diagnostico)
 
         # ── Auditoria ─────────────────────────────────────────────
         if len(df_auditoria) > 0:
-            html += self._secao_auditoria(df_auditoria)
+            html_content +=self._secao_auditoria(df_auditoria)
         else:
-            html += """
+            html_content +="""
   <section class="card" role="region" aria-label="Auditoria de dados">
     <h2>✓ Auditoria</h2>
     <p style="color:#065F46;font-weight:600;font-size:14px" role="status">Nenhum problema encontrado nos dados.</p>
@@ -177,22 +177,22 @@ class GeradorHTML:
 """
         # ── Aging ─────────────────────────────────────────────────
         if df_aging is not None and len(df_aging):
-            html += self._secao_aging(df_aging)
+            html_content +=self._secao_aging(df_aging)
 
         # ── Fluxo por Período ─────────────────────────────────────
         if any(df is not None and len(df) > 0
                for df in [df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual]):
-            html += self._secao_fluxo(df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual)
+            html_content +=self._secao_fluxo(df_fluxo_diario, df_fluxo_mensal, df_fluxo_anual)
 
         # ── DRE ───────────────────────────────────────────────────
         if df_dre is not None and len(df_dre):
-            html += self._secao_dre(df_dre)
+            html_content +=self._secao_dre(df_dre)
 
         # ── Pareto ────────────────────────────────────────────────
         if df_pareto is not None and len(df_pareto):
-            html += self._secao_pareto(df_pareto)
+            html_content +=self._secao_pareto(df_pareto)
 
-        html += f"""
+        html_content +=f"""
 </main>
 <footer class="footer" role="contentinfo">
   Relatório gerado automaticamente pelo Toolkit Financeiro &bull; {agora}
@@ -200,8 +200,8 @@ class GeradorHTML:
   <span style="font-size:10px;opacity:0.7;">Powered by <strong>Luan Guilherme Lourenço</strong></span>
 </footer>
 </body></html>"""
-        logger.info("Relatório HTML gerado (%d bytes)", len(html))
-        return html
+        logger.info("Relatório HTML gerado (%d bytes)", len(html_content))
+        return html_content
 
     # ── Seções privadas ───────────────────────────────────────────
 
@@ -221,10 +221,11 @@ class GeradorHTML:
         except (ValueError, TypeError):
             return '—'
 
-    def _badge(self, sev: str) -> str:
+    def _badge(self, sev) -> str:
+        sev_str = str(sev or '').upper()
         cls = {'CRÍTICA': 'critica', 'ALTA': 'alta', 'MÉDIA': 'media',
-               'BAIXA': 'baixa', 'OK': 'ok'}.get(sev.upper(), 'media')
-        return f'<span class="badge badge-{cls}" role="status" aria-label="Severidade: {self._esc(sev)}">{self._esc(sev)}</span>'
+               'BAIXA': 'baixa', 'OK': 'ok'}.get(sev_str, 'media')
+        return f'<span class="badge badge-{cls}" role="status" aria-label="Severidade: {self._esc(sev_str)}">{self._esc(sev_str)}</span>'
 
     def gerar_pdf(self, html_str: str, caminho_pdf: str) -> bool:
         """Converte HTML gerado em PDF usando WeasyPrint.
@@ -340,7 +341,8 @@ class GeradorHTML:
     def _secao_dre(self, df: pd.DataFrame) -> str:
         rows = ''
         totais = {'(=) Receita Líquida', '(=) Lucro Bruto',
-                  '(=) Resultado Operacional (EBIT)', '(=) Resultado antes IR/CSLL', '(=) Lucro Líquido'}
+                  '(=) Resultado Operacional (EBIT)', '(=) EBIT (Resultado Operacional)',
+                  '(=) Resultado antes IR/CSLL', '(=) Lucro Líquido'}
         for _, r in df.iterrows():
             linha = str(r.get('Linha_DRE', ''))
             valor = float(r.get('Valor_RS', 0))
@@ -366,7 +368,9 @@ class GeradorHTML:
 
     def _secao_pareto(self, df: pd.DataFrame) -> str:
         col_ent = df.columns[0]
-        max_val = df['Total_RS'].max() if len(df) else 1
+        max_val = float(df['Total_RS'].max()) if len(df) else 1
+        if not max_val or pd.isna(max_val):
+            max_val = 1
         rows = ''
         for _, r in df.head(15).iterrows():
             pct_bar = min(float(r.get('Total_RS', 0)) / max_val * 100, 100)

@@ -389,7 +389,7 @@ class Auditor:
             return inconsistencias
         datas = pd.to_datetime(df[col_data], errors='coerce', dayfirst=True)
         if hasattr(datas.dtype, 'tz') and datas.dtype.tz is not None:
-            datas = datas.dt.tz_localize(None)
+            datas = datas.dt.tz_convert(None)
         hoje = pd.Timestamp.now()
         for idx, row in df[datas > hoje].iterrows():
             inconsistencias.append({
@@ -401,6 +401,8 @@ class Auditor:
             })
         if col_data2 and col_data2 in df.columns:
             datas2 = pd.to_datetime(df[col_data2], errors='coerce', dayfirst=True)
+            if hasattr(datas2.dtype, 'tz') and datas2.dtype.tz is not None:
+                datas2 = datas2.dt.tz_convert(None)
             for idx, row in df[datas2 < datas].iterrows():
                 inconsistencias.append({
                     'aba': aba, 'linha': idx + 2,
@@ -713,18 +715,24 @@ class AnalistaFinanceiro:
         venc = pd.to_datetime(df[col_vencimento], errors='coerce', dayfirst=True)
         # Garantir tz-naive em ambos os lados para evitar TypeError em planilhas com timezone
         if hasattr(venc.dtype, 'tz') and venc.dtype.tz is not None:
-            venc = venc.dt.tz_localize(None)
-        data_ref_ts = pd.Timestamp(data_ref).tz_localize(None) if pd.Timestamp(data_ref).tzinfo is not None else pd.Timestamp(data_ref)
+            venc = venc.dt.tz_convert(None)
+        ts = pd.Timestamp(data_ref)
+        data_ref_ts = ts.tz_convert(None) if ts.tzinfo is not None else ts
         dias = (data_ref_ts - venc).dt.days
         faixa_media = (faixa_atencao + faixa_critica) // 2
+
+        _lbl_1 = f'Vencido 1-{faixa_atencao} dias'
+        _lbl_2 = f'Vencido {faixa_atencao+1}-{faixa_media} dias'
+        _lbl_3 = f'Vencido {faixa_media+1}-{faixa_critica} dias'
+        _lbl_4 = f'Vencido +{faixa_critica} dias'
 
         def _faixa(d):
             if pd.isna(d): return 'Sem data'
             if d <= 0:      return 'A vencer'
-            if d <= faixa_atencao: return 'Vencido 1-30 dias'
-            if d <= faixa_media:   return 'Vencido 31-60 dias'
-            if d <= faixa_critica: return 'Vencido 61-90 dias'
-            return 'Vencido +90 dias'
+            if d <= faixa_atencao: return _lbl_1
+            if d <= faixa_media:   return _lbl_2
+            if d <= faixa_critica: return _lbl_3
+            return _lbl_4
 
         df['Faixa_Aging'] = dias.apply(_faixa)
         df['Dias_Atraso'] = dias.clip(lower=0)
@@ -732,11 +740,12 @@ class AnalistaFinanceiro:
             Quantidade=(col_valor, 'count'),
             Total_RS=(col_valor, 'sum'),
         ).reset_index()
-        ordem = ['A vencer', 'Vencido 1-30 dias', 'Vencido 31-60 dias', 'Vencido 61-90 dias', 'Vencido +90 dias', 'Sem data']
+        ordem = ['A vencer', _lbl_1, _lbl_2, _lbl_3, _lbl_4, 'Sem data']
         resumo['_ord'] = resumo['Faixa_Aging'].map({f: i for i, f in enumerate(ordem)})
         resumo = resumo.sort_values('_ord').drop(columns='_ord').reset_index(drop=True)
         resumo['Total_RS'] = resumo['Total_RS'].round(2)
-        resumo['Percentual'] = (resumo['Total_RS'] / resumo['Total_RS'].sum() * 100).round(1)
+        _total_aging = resumo['Total_RS'].sum()
+        resumo['Percentual'] = (resumo['Total_RS'] / _total_aging * 100).round(1) if _total_aging else 0.0
         return resumo
 
     @staticmethod
@@ -953,7 +962,7 @@ class AnalistaFinanceiro:
 
         # Strip timezone so resample works regardless of whether dates are tz-aware
         if hasattr(df_valid['_data'].dtype, 'tz') and df_valid['_data'].dtype.tz is not None:
-            df_valid['_data'] = df_valid['_data'].dt.tz_localize(None)
+            df_valid['_data'] = df_valid['_data'].dt.tz_convert(None)
         df_valid = df_valid.set_index('_data')
         chave_col = col_chave if col_chave in df_valid.columns else df_valid.columns[0]
 
@@ -1028,9 +1037,12 @@ class AnalistaComercial:
         ).reset_index().sort_values('Total_RS', ascending=False).reset_index(drop=True)
         agrupado['Total_RS']    = agrupado['Total_RS'].round(2)
         total_geral             = agrupado['Total_RS'].sum()
-        agrupado['Percentual']  = (agrupado['Total_RS'] / total_geral * 100).round(1)
+        agrupado['Percentual']  = (agrupado['Total_RS'] / total_geral * 100).round(1) if total_geral else 0.0
         agrupado['Acumulado_%'] = agrupado['Percentual'].cumsum().round(1)
-        agrupado['Classe_Pareto'] = np.where(agrupado['Acumulado_%'] <= top_pct * 100, 'A', 'B')
+        classe = np.where(agrupado['Acumulado_%'] <= top_pct * 100, 'A', 'B')
+        if len(classe):
+            classe[0] = 'A'  # garante que o primeiro item seja sempre Classe A
+        agrupado['Classe_Pareto'] = classe
         agrupado['Ranking'] = range(1, len(agrupado) + 1)
         return agrupado
 
@@ -1086,7 +1098,10 @@ class Util:
 
     @staticmethod
     def normalizar_cnpj_cpf(series: pd.Series) -> pd.Series:
-        return series.astype(str).str.replace(r'[.()\-/\s]', '', regex=True).str.strip()
+        return (series.fillna('').astype(str)
+                .replace({'nan': '', 'None': ''})
+                .str.replace(r'[.()\-/\s]', '', regex=True)
+                .str.strip())
 
     @staticmethod
     def corrigir_encoding(series: pd.Series) -> pd.Series:
@@ -1867,13 +1882,20 @@ class Normalizador:
 
             # Coerce de tipo
             if tipo == 'moeda':
-                serie = pd.to_numeric(
-                    serie.astype(str)
-                         .str.replace(r'[R$\s]', '', regex=True)
-                         .str.replace('.', '', regex=False)
-                         .str.replace(',', '.', regex=False),
-                    errors='coerce'
-                ).fillna(0.0)
+                # Tenta conversão direta primeiro (para valores já numéricos ou US format)
+                _direct = pd.to_numeric(serie, errors='coerce')
+                _mask_fail = _direct.isna() & serie.astype(str).str.strip().ne('')
+                if _mask_fail.any():
+                    # Tenta formato PT-BR: remove ponto de milhar e converte vírgula → ponto
+                    _br = pd.to_numeric(
+                        serie[_mask_fail].astype(str)
+                            .str.replace(r'[R$\s()]', '', regex=True)
+                            .str.replace('.', '', regex=False)
+                            .str.replace(',', '.', regex=False),
+                        errors='coerce'
+                    )
+                    _direct = _direct.where(~_mask_fail, _br)
+                serie = _direct.fillna(0.0)
 
             elif tipo == 'data':
                 serie = pd.to_datetime(serie, errors='coerce', dayfirst=True)
