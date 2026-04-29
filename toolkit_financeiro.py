@@ -157,6 +157,12 @@ class Leitor:
                 diagnostico['abas'].append(Leitor._info_aba('Dados', df))
                 diagnostico['total_registros'] = len(df)
 
+            elif ext == '.ofx':
+                df = Leitor.ler_ofx(caminho)
+                dados['Extrato'] = df
+                diagnostico['abas'].append(Leitor._info_aba('Extrato', df))
+                diagnostico['total_registros'] = len(df)
+
             else:
                 raise ValueError(f"Formato não suportado: {ext}")
 
@@ -190,6 +196,65 @@ class Leitor:
             'nulos': df.isnull().sum().to_dict(),
             'duplicatas': int(df.duplicated().sum()),
         }
+
+    @staticmethod
+    def ler_ofx(caminho: str) -> pd.DataFrame:
+        """Lê arquivo OFX bancário (SGML ou XML) e retorna DataFrame padrão.
+
+        Colunas retornadas: Data, Vencimento, Valor, Descrição, ID, Tipo
+        Compatível com exportações de Itaú, Bradesco, BB, Santander, Caixa etc.
+        """
+        text = None
+        for enc in ('windows-1252', 'utf-8', 'latin-1'):
+            try:
+                with open(caminho, encoding=enc, errors='strict') as f:
+                    text = f.read()
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
+        if text is None:
+            raise RuntimeError(f"Não foi possível decodificar '{caminho}'")
+
+        idx = text.upper().find('<OFX>')
+        if idx == -1:
+            raise ValueError(f"Bloco <OFX> não encontrado em '{caminho}'")
+        body = text[idx:]
+
+        blocos = re.findall(r'<STMTTRN>(.*?)</STMTTRN>', body, re.IGNORECASE | re.DOTALL)
+        if not blocos:
+            raise ValueError(f"Nenhuma transação encontrada em '{caminho}'")
+
+        _field = re.compile(r'<([A-Z.]+)>([^<\r\n]*)', re.IGNORECASE)
+
+        def _parse(blk: str) -> dict:
+            return {m.group(1).upper(): m.group(2).strip() for m in _field.finditer(blk)}
+
+        def _data(dtstr: str) -> str:
+            s = re.sub(r'[^\d].*', '', dtstr)[:8]
+            return f'{s[6:8]}/{s[4:6]}/{s[0:4]}' if len(s) == 8 else ''
+
+        TIPO_MAP = {
+            'CREDIT': 'CRÉDITO', 'DEP': 'CRÉDITO', 'INT': 'CRÉDITO', 'DIV': 'CRÉDITO',
+            'DEBIT': 'DÉBITO',   'ATM': 'DÉBITO',   'POS': 'DÉBITO',  'FEE': 'DÉBITO',
+            'PAYMENT': 'DÉBITO', 'CHECK': 'DÉBITO',  'XFER': 'TRANSFERÊNCIA',
+        }
+
+        rows = []
+        for blk in blocos:
+            f = _parse(blk)
+            data = _data(f.get('DTPOSTED', ''))
+            try:
+                valor = float(f.get('TRNAMT', '0').replace(',', '.'))
+            except ValueError:
+                valor = 0.0
+            descr = f.get('MEMO') or f.get('NAME') or ''
+            descr = descr.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+            fitid = f.get('FITID', '')
+            tipo  = TIPO_MAP.get((f.get('TRNTYPE') or '').upper(), f.get('TRNTYPE', ''))
+            rows.append({'Data': data, 'Vencimento': data, 'Valor': valor,
+                         'Descrição': descr, 'ID': fitid, 'Tipo': tipo})
+
+        return pd.DataFrame(rows, columns=['Data', 'Vencimento', 'Valor', 'Descrição', 'ID', 'Tipo'])
 
     @staticmethod
     def _detectar_problemas_formato(df: pd.DataFrame, aba: str) -> list:

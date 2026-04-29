@@ -114,6 +114,86 @@ class TestLeitor:
         assert 'teste.csv' in resultado
 
 
+    def test_ler_ofx_sgml_retorna_dataframe(self, tmp_path):
+        ofx = tmp_path / 'extrato.ofx'
+        ofx.write_text(
+            'OFXHEADER:100\nDATA:OFXSGML\n\n'
+            '<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKTRANLIST>\n'
+            '<STMTTRN>\n<TRNTYPE>CREDIT\n<DTPOSTED>20240115\n'
+            '<TRNAMT>1500.00\n<FITID>TX001\n<MEMO>PAGAMENTO RECEBIDO\n</STMTTRN>\n'
+            '<STMTTRN>\n<TRNTYPE>DEBIT\n<DTPOSTED>20240120\n'
+            '<TRNAMT>-320.50\n<FITID>TX002\n<MEMO>CONTA DE LUZ\n</STMTTRN>\n'
+            '</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>\n',
+            encoding='utf-8',
+        )
+        df = Leitor.ler_ofx(str(ofx))
+        assert isinstance(df, pd.DataFrame)
+        assert list(df.columns) == ['Data', 'Vencimento', 'Valor', 'Descrição', 'ID', 'Tipo']
+        assert len(df) == 2
+
+    def test_ler_ofx_datas_convertidas(self, tmp_path):
+        ofx = tmp_path / 'extrato.ofx'
+        ofx.write_text(
+            '<OFX><STMTTRNRS><STMTRS><BANKTRANLIST>\n'
+            '<STMTTRN>\n<DTPOSTED>20240315000000[-3:BRT]\n<TRNAMT>100.00\n'
+            '<FITID>X1\n<MEMO>TEV\n</STMTTRN>\n'
+            '</BANKTRANLIST></STMTRS></STMTTRNRS></OFX>\n',
+            encoding='utf-8',
+        )
+        df = Leitor.ler_ofx(str(ofx))
+        assert df.iloc[0]['Data'] == '15/03/2024'
+
+    def test_ler_ofx_valores_com_sinal(self, tmp_path):
+        ofx = tmp_path / 'extrato.ofx'
+        ofx.write_text(
+            '<OFX><STMTTRNRS><STMTRS><BANKTRANLIST>\n'
+            '<STMTTRN>\n<DTPOSTED>20240101\n<TRNAMT>500.00\n<FITID>A\n<MEMO>C\n</STMTTRN>\n'
+            '<STMTTRN>\n<DTPOSTED>20240101\n<TRNAMT>-200.00\n<FITID>B\n<MEMO>D\n</STMTTRN>\n'
+            '</BANKTRANLIST></STMTRS></STMTTRNRS></OFX>\n',
+            encoding='utf-8',
+        )
+        df = Leitor.ler_ofx(str(ofx))
+        assert df.iloc[0]['Valor'] == pytest.approx(500.0)
+        assert df.iloc[1]['Valor'] == pytest.approx(-200.0)
+
+    def test_ler_ofx_tipo_normalizado(self, tmp_path):
+        ofx = tmp_path / 'extrato.ofx'
+        ofx.write_text(
+            '<OFX><STMTTRNRS><STMTRS><BANKTRANLIST>\n'
+            '<STMTTRN>\n<DTPOSTED>20240101\n<TRNTYPE>CREDIT\n<TRNAMT>100\n<FITID>A\n<MEMO>M\n</STMTTRN>\n'
+            '<STMTTRN>\n<DTPOSTED>20240101\n<TRNTYPE>DEBIT\n<TRNAMT>-50\n<FITID>B\n<MEMO>N\n</STMTTRN>\n'
+            '</BANKTRANLIST></STMTRS></STMTTRNRS></OFX>\n',
+            encoding='utf-8',
+        )
+        df = Leitor.ler_ofx(str(ofx))
+        assert df.iloc[0]['Tipo'] == 'CRÉDITO'
+        assert df.iloc[1]['Tipo'] == 'DÉBITO'
+
+    def test_ler_ofx_sem_transacoes_levanta_erro(self, tmp_path):
+        ofx = tmp_path / 'vazio.ofx'
+        ofx.write_text('<OFX><BANKMSGSRSV1></BANKMSGSRSV1></OFX>\n', encoding='utf-8')
+        with pytest.raises(ValueError, match='transação'):
+            Leitor.ler_ofx(str(ofx))
+
+    def test_ler_ofx_sem_bloco_ofx_levanta_erro(self, tmp_path):
+        ofx = tmp_path / 'invalido.ofx'
+        ofx.write_text('conteudo invalido sem tag ofx\n', encoding='utf-8')
+        with pytest.raises(ValueError, match='OFX'):
+            Leitor.ler_ofx(str(ofx))
+
+    def test_ler_arquivo_despacha_ofx(self, tmp_path):
+        ofx = tmp_path / 'extrato.ofx'
+        ofx.write_text(
+            '<OFX><STMTTRNRS><STMTRS><BANKTRANLIST>\n'
+            '<STMTTRN>\n<DTPOSTED>20240101\n<TRNAMT>100\n<FITID>X\n<MEMO>M\n</STMTTRN>\n'
+            '</BANKTRANLIST></STMTRS></STMTTRNRS></OFX>\n',
+            encoding='utf-8',
+        )
+        resultado = Leitor.ler_arquivo(str(ofx))
+        assert 'Extrato' in resultado['dados']
+        assert resultado['diagnostico']['total_registros'] == 1
+
+
 # ── Auditor ───────────────────────────────────────────────────────
 
 class TestAuditor:

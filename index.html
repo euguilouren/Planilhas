@@ -695,6 +695,50 @@ function calcularKPIsComparativo(kpisA, kpisB) {
 // Exportar para uso no app.js
 // (module.exports removido para uso direto no navegador)
 
+// ══════════════════════════════════════════════════════
+// OFX — PARSER DE EXTRATO BANCÁRIO (SGML e XML)
+// ══════════════════════════════════════════════════════
+
+function parseOFX(text) {
+  const idx = text.toUpperCase().indexOf('<OFX>');
+  if (idx === -1) throw new Error('Arquivo OFX inválido: bloco <OFX> não encontrado.');
+  const body = text.slice(idx);
+
+  // Extrai blocos <STMTTRN>…</STMTTRN> — presente em SGML e XML
+  const blocos = [...body.matchAll(/<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi)].map(m => m[1]);
+  if (!blocos.length) throw new Error('Nenhuma transação encontrada no arquivo OFX.');
+
+  // Extrai valor do campo: funciona com tags sem fechamento (SGML) e com (XML)
+  function campo(bloco, tag) {
+    const m = new RegExp(`<${tag}>([^<\\r\\n]*)`, 'i').exec(bloco);
+    return m ? m[1].trim() : '';
+  }
+
+  // YYYYMMDD[HHMMSS[tz]] → DD/MM/YYYY
+  function parseDt(dt) {
+    const s = dt.replace(/[^\d].*/, '').slice(0, 8);
+    return s.length === 8 ? `${s.slice(6)}/${s.slice(4,6)}/${s.slice(0,4)}` : '';
+  }
+
+  const TIPO_MAP = {
+    CREDIT:'CRÉDITO', DEP:'CRÉDITO', INT:'CRÉDITO', DIV:'CRÉDITO',
+    DEBIT:'DÉBITO',   ATM:'DÉBITO',  POS:'DÉBITO',  PAYMENT:'DÉBITO', CHECK:'DÉBITO', FEE:'DÉBITO',
+    XFER:'TRANSFERÊNCIA',
+  };
+
+  const dados = blocos.map(b => {
+    const data  = parseDt(campo(b, 'DTPOSTED'));
+    const valor = parseFloat((campo(b, 'TRNAMT') || '0').replace(',', '.')) || 0;
+    const descr = (campo(b, 'MEMO') || campo(b, 'NAME') || '')
+                    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+    const id    = campo(b, 'FITID');
+    const tipo  = TIPO_MAP[(campo(b, 'TRNTYPE') || '').toUpperCase()] || campo(b, 'TRNTYPE');
+    return { 'Data': data, 'Vencimento': data, 'Valor': valor, 'Descrição': descr, 'ID': id, 'Tipo': tipo };
+  });
+
+  return { headers: ['Data', 'Vencimento', 'Valor', 'Descrição', 'ID', 'Tipo'], dados };
+}
+
 </script>
 <style>
 :root{
@@ -1158,7 +1202,7 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
       </svg>
     </div>
     <p class="upload-title">Arraste sua planilha aqui</p>
-    <p class="upload-sub">Excel (.xlsx, .xls) ou CSV — processado 100% no seu navegador</p>
+    <p class="upload-sub">Excel (.xlsx, .xls), CSV ou OFX (extrato bancário) — processado 100% no seu navegador</p>
     <p style="font-size:10px;color:#94A3B8;margin-top:-4px;margin-bottom:8px;">&copy; 2025 <strong style="color:#64748B">Luan Guilherme Lourenço</strong> &mdash; Todos os direitos reservados</p>
     <button class="btn-upload" onclick="document.getElementById('file-input').click()">
       Selecionar arquivo
@@ -1166,7 +1210,7 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
     <button class="btn-upload btn-template" onclick="baixarTemplate()">
       ↓ Baixar Template Padrão
     </button>
-    <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.xlsm">
+    <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.xlsm,.ofx">
   </div>
 
   <div class="col-config" id="col-config" style="display:none">
@@ -1438,7 +1482,10 @@ function carregarArquivo(file) {
   reader.onload = e => {
     try {
       let dados, headers;
-      if (file.name.toLowerCase().endsWith('.csv')) {
+      if (file.name.toLowerCase().endsWith('.ofx')) {
+        ({ headers, dados } = parseOFX(e.target.result));
+        if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX.');
+      } else if (file.name.toLowerCase().endsWith('.csv')) {
         const txt   = e.target.result;
         const wb    = XLSX.read(txt, { type:'string', raw:false });
         const ws    = wb.Sheets[wb.SheetNames[0]];
@@ -1504,7 +1551,9 @@ function carregarArquivo(file) {
     }
   };
   reader.onerror = () => { mostrarLoader(false); alert('Erro ao ler o arquivo. Verifique se ele não está aberto em outro programa.'); };
-  if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
+  if (file.name.toLowerCase().endsWith('.ofx'))
+    reader.readAsText(file, 'windows-1252');
+  else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
     reader.readAsText(file, 'utf-8');
   else
     reader.readAsArrayBuffer(file);
@@ -1516,7 +1565,7 @@ function carregarArquivo(file) {
 function abrirComparativo() {
   const inp = document.createElement('input');
   inp.type = 'file';
-  inp.accept = '.xlsx,.xls,.csv,.xlsm';
+  inp.accept = '.xlsx,.xls,.csv,.xlsm,.ofx';
   inp.onchange = e => { if (e.target.files[0]) carregarArquivoComparativo(e.target.files[0]); };
   inp.click();
 }
@@ -1529,7 +1578,10 @@ function carregarArquivoComparativo(file) {
   reader.onload = e => {
     try {
       let dados, headers;
-      if (file.name.toLowerCase().endsWith('.csv')) {
+      if (file.name.toLowerCase().endsWith('.ofx')) {
+        ({ headers, dados } = parseOFX(e.target.result));
+        if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX comparativo.');
+      } else if (file.name.toLowerCase().endsWith('.csv')) {
         const wb  = XLSX.read(e.target.result, { type:'string', raw:false });
         const ws  = wb.Sheets[wb.SheetNames[0]];
         const arr = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
@@ -1571,7 +1623,9 @@ function carregarArquivoComparativo(file) {
     }
   };
   reader.onerror = () => { mostrarLoader(false); alert('Erro ao ler o arquivo comparativo. Verifique se ele não está aberto em outro programa.'); };
-  if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
+  if (file.name.toLowerCase().endsWith('.ofx'))
+    reader.readAsText(file, 'windows-1252');
+  else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
     reader.readAsText(file, 'utf-8');
   else reader.readAsArrayBuffer(file);
 }

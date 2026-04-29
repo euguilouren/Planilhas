@@ -153,7 +153,7 @@ class AnalisadorClaudeAPI:
 class ProcessadorArquivo:
     """Processa um arquivo financeiro e gera relatório HTML + Excel."""
 
-    EXTENSOES_SUPORTADAS = {'.xlsx', '.xls', '.xlsm', '.csv', '.tsv'}
+    EXTENSOES_SUPORTADAS = {'.xlsx', '.xls', '.xlsm', '.csv', '.tsv', '.ofx'}
 
     def __init__(self, config: dict):
         self.cfg      = config
