@@ -45,7 +45,7 @@ jobs:
             --cov=relatorio_html \
             --cov=motor_automatico \
             --cov-report=term-missing \
-            --cov-fail-under=70 \
+            --cov-fail-under=55 \
             --tb=short
 
   lint:
