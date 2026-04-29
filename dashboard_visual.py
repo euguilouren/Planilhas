@@ -399,7 +399,6 @@ def _secao_pareto(df: pd.DataFrame | None) -> str:
         acum    = float(r.get('Acumulado_%', 0))
         classe  = _esc(str(r.get('Classe_Pareto', '')))
         rank    = int(r.get('Ranking', 0))
-        tipo_b  = _esc(str(r.get('Tipo', '')))
         pct_bar = min(val / max_val * 100, 100)
         cor_cls = '#C9A227' if 'A' in classe else '#9BA8B5'
         rows += (

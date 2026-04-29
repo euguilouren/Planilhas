@@ -403,7 +403,7 @@ class GeradorHTML:
         """Renderiza seção de fluxo de caixa por período (diário/mensal/anual)."""
         def _tabela(df, label_id):
             if df is None or len(df) == 0:
-                return f'<p style="color:#6B7280;font-size:13px">Nenhum dado disponível.</p>'
+                return '<p style="color:#6B7280;font-size:13px">Nenhum dado disponível.</p>'
             tot_rec  = df['Receita_RS'].sum()
             tot_desp = df['Despesa_RS'].sum()
             tot_res  = df['Resultado_RS'].sum()

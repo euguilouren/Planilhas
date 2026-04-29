@@ -11,7 +11,6 @@ Execução:
 """
 
 import os
-import sys
 import ssl
 import html as _html_mod
 import time
@@ -19,7 +18,6 @@ import logging
 import smtplib
 import argparse
 import traceback
-from difflib                import get_close_matches
 from email.mime.text        import MIMEText
 from email.mime.multipart   import MIMEMultipart
 from datetime               import datetime, timezone
@@ -30,7 +28,7 @@ import pandas as pd
 
 from toolkit_financeiro import (
     Leitor, Auditor, AnalistaFinanceiro, AnalistaComercial,
-    MontadorPlanilha, Verificador, Util, Status, validar_config,
+    MontadorPlanilha, Status, validar_config,
     Normalizador,
 )
 from relatorio_html import GeradorHTML

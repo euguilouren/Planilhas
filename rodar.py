@@ -22,9 +22,8 @@ except ImportError:
     _YAML_OK = False
 
 from toolkit_financeiro import (
-    Leitor, Auditor, Conciliador, AnalistaFinanceiro,
-    AnalistaComercial, MontadorPlanilha, Verificador,
-    PipelineFinanceiro, Util, PrestadorContas, Status
+    Leitor, Auditor, AnalistaFinanceiro,
+    AnalistaComercial, MontadorPlanilha, Status
 )
 
 logging.basicConfig(

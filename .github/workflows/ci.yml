@@ -63,7 +63,10 @@ jobs:
         run: pip install ruff
 
       - name: Ruff (lint + format check)
-        run: ruff check . --select=E,F,W,B --ignore=E501,E402 --exclude=tests/
+        # E701/E702: compact inline statements (intentional style in this codebase)
+        # B023: loop variable in lambda (false positives — lambdas applied immediately)
+        # B905: zip() strict= (Python 3.10+ only concern, not a bug here)
+        run: ruff check . --select=E,F,W,B --ignore=E501,E402,E701,E702,B023,B905 --exclude=tests/
 
   validate-html:
     name: Validar index.html

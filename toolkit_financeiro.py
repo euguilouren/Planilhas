@@ -12,23 +12,21 @@ __author__  = "Luan Guilherme Lourenço"
 
 import os
 import re
-import json
 import hashlib
 import logging
 import warnings
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import OrderedDict
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Union, Optional, List, Dict
+from typing import Union, List, Dict
 
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.formatting.rule import CellIsRule
 
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
@@ -2228,7 +2226,6 @@ class Normalizador:
         hdr_fill  = PatternFill('solid', fgColor='1A3556')
         sub_font  = Font(name='Arial', bold=True, size=10, color='1A3556')
         ok_fill   = PatternFill('solid', fgColor='D1FAE5')
-        opt_fill  = PatternFill('solid', fgColor='FEF3C7')
         thin_brd  = Border(
             left=Side(style='thin', color='B0B0B0'),
             right=Side(style='thin', color='B0B0B0'),
@@ -2258,7 +2255,6 @@ class Normalizador:
                 cel_o.fill = ok_fill
             cel_o.alignment = Alignment(horizontal='center')
             if col_def.get('opcoes'):
-                opc_row = i + len(Normalizador.COLUNAS_PADRAO) + 3
                 ws_info.cell(i, 2).value += f"  |  Opções: {', '.join(col_def['opcoes'])}"
             for col_idx in range(1, 4):
                 ws_info.cell(i, col_idx).border = thin_brd
