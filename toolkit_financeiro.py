@@ -12,23 +12,21 @@ __author__  = "Luan Guilherme Lourenço"
 
 import os
 import re
-import json
 import hashlib
 import logging
 import warnings
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import OrderedDict
 from difflib import SequenceMatcher
 from enum import Enum
-from typing import Union, Optional, List, Dict
+from typing import Union, List, Dict
 
 import numpy as np
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.formatting.rule import CellIsRule
 
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
@@ -204,8 +202,9 @@ class Leitor:
         Colunas retornadas: Data, Vencimento, Valor, Descrição, ID, Tipo
         Compatível com exportações de Itaú, Bradesco, BB, Santander, Caixa etc.
         """
+        # Try modern encodings first (Nubank, Inter, C6 export UTF-8)
         text = None
-        for enc in ('windows-1252', 'utf-8', 'latin-1'):
+        for enc in ('utf-8-sig', 'utf-8', 'windows-1252', 'latin-1'):
             try:
                 with open(caminho, encoding=enc, errors='strict') as f:
                     text = f.read()
@@ -230,8 +229,25 @@ class Leitor:
             return {m.group(1).upper(): m.group(2).strip() for m in _field.finditer(blk)}
 
         def _data(dtstr: str) -> str:
+            # Handle ISO dates (2024-01-15) and OFX SGML (20240115...)
+            iso = re.match(r'^(\d{4})-(\d{2})-(\d{2})', dtstr)
+            if iso:
+                return f'{iso.group(3)}/{iso.group(2)}/{iso.group(1)}'
             s = re.sub(r'[^\d].*', '', dtstr)[:8]
             return f'{s[6:8]}/{s[4:6]}/{s[0:4]}' if len(s) == 8 else ''
+
+        def _parse_valor(s: str) -> float:
+            """Parses TRNAMT which may be US (1234.56) or PT-BR (1.234,56)."""
+            s = s.strip()
+            if not s:
+                return 0.0
+            # PT-BR: has comma as decimal separator (e.g. -1.234,56)
+            if ',' in s:
+                s = s.replace('.', '').replace(',', '.')
+            try:
+                return float(s)
+            except ValueError:
+                return 0.0
 
         TIPO_MAP = {
             'CREDIT': 'CRÉDITO', 'DEP': 'CRÉDITO', 'INT': 'CRÉDITO', 'DIV': 'CRÉDITO',
@@ -243,12 +259,9 @@ class Leitor:
         for blk in blocos:
             f = _parse(blk)
             data = _data(f.get('DTPOSTED', ''))
-            try:
-                valor = float(f.get('TRNAMT', '0').replace(',', '.'))
-            except ValueError:
-                valor = 0.0
-            descr = f.get('MEMO') or f.get('NAME') or ''
-            descr = descr.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+            valor = _parse_valor(f.get('TRNAMT', '0'))
+            import html as _html_esc
+            descr = _html_esc.unescape(f.get('MEMO') or f.get('NAME') or '')
             fitid = f.get('FITID', '')
             tipo  = TIPO_MAP.get((f.get('TRNTYPE') or '').upper(), f.get('TRNTYPE', ''))
             rows.append({'Data': data, 'Vencimento': data, 'Valor': valor,
@@ -1355,22 +1368,29 @@ class MontadorPlanilha:
         self.abas_criadas: List[str] = []
         self._aba_meta: Dict[str, dict] = {}
 
+    # Prefixos que o Excel interpreta como fórmula (CWE-1236 / OWASP CSV Injection)
+    _FORMULA_TRIGGERS = frozenset({'=', '+', '-', '@', '\t', '\r'})
+
     @staticmethod
     def _safe_value(valor) -> Union[str, float, int, None]:
         if isinstance(valor, (list, dict, set, tuple)):
-            return str(valor)[:MontadorPlanilha.MAX_CELL_TEXT]
-        if isinstance(valor, np.integer):
+            valor = str(valor)
+        elif isinstance(valor, np.integer):
             return int(valor)
-        if isinstance(valor, np.floating):
+        elif isinstance(valor, np.floating):
             return float(valor)
-        if isinstance(valor, str):
-            return valor[:MontadorPlanilha.MAX_CELL_TEXT]
-        try:
-            if pd.isna(valor):
-                return ''
-        except (TypeError, ValueError):
-            pass
-        return valor
+        elif not isinstance(valor, str):
+            try:
+                if pd.isna(valor):
+                    return ''
+            except (TypeError, ValueError):
+                pass
+            return valor
+        s = valor[:MontadorPlanilha.MAX_CELL_TEXT]
+        # Neutraliza formula/CSV injection: prefixa apóstrofo para forçar texto
+        if s and s[0] in MontadorPlanilha._FORMULA_TRIGGERS:
+            s = "'" + s
+        return s
 
     @staticmethod
     def _calc_col_width(col_name: str, series: pd.Series, is_moeda: bool = False) -> float:
@@ -1968,10 +1988,12 @@ class Normalizador:
 
             elif tipo == 'lista':
                 opcoes = col_def.get('opcoes', [])
-                # Normaliza para uppercase e verifica se está nas opções válidas
+                # Normaliza para uppercase
                 serie = serie.astype(str).str.strip().str.upper()
-                # Mantém valor se for opção válida, senão deixa vazio
-                serie = serie.where(serie.isin(opcoes + ['']), other='')
+                # Only filter to valid options when the list is non-empty;
+                # an empty opcoes means "any value allowed" (guard against zeroing all values)
+                if opcoes:
+                    serie = serie.where(serie.isin(opcoes + ['']), other='')
 
             else:  # texto
                 serie = serie.fillna('').astype(str).str.strip()
@@ -2204,7 +2226,6 @@ class Normalizador:
         hdr_fill  = PatternFill('solid', fgColor='1A3556')
         sub_font  = Font(name='Arial', bold=True, size=10, color='1A3556')
         ok_fill   = PatternFill('solid', fgColor='D1FAE5')
-        opt_fill  = PatternFill('solid', fgColor='FEF3C7')
         thin_brd  = Border(
             left=Side(style='thin', color='B0B0B0'),
             right=Side(style='thin', color='B0B0B0'),
@@ -2234,7 +2255,6 @@ class Normalizador:
                 cel_o.fill = ok_fill
             cel_o.alignment = Alignment(horizontal='center')
             if col_def.get('opcoes'):
-                opc_row = i + len(Normalizador.COLUNAS_PADRAO) + 3
                 ws_info.cell(i, 2).value += f"  |  Opções: {', '.join(col_def['opcoes'])}"
             for col_idx in range(1, 4):
                 ws_info.cell(i, col_idx).border = thin_brd

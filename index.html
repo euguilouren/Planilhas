@@ -390,7 +390,7 @@ function calcularPareto(dados, colEntidade, colValor, top = 15) {
   });
   const lista = Object.entries(mapa)
     .map(([nome, total]) => ({ nome, total }))
-    .sort((a,b) => b.total - a.total);
+    .sort((a,b) => Math.abs(b.total) - Math.abs(a.total));
   const totalGeral     = lista.reduce((s,i)=>s+i.total, 0);
   const totalEntidades = lista.length;
   // Base para % = soma dos valores positivos (receitas); se não há positivos usa abs total
@@ -450,6 +450,8 @@ function construirDRE(dados, colCat, colValor) {
     const totalClassificado = Object.values(valores).reduce((a,b)=>a+Math.abs(b),0);
     if (totalClassificado === 0) {
       modo = 'sinal';
+      // Zero all accumulators before fallback pass to avoid double-counting
+      MAPA_DRE.forEach(({ linha }) => { valores[linha] = 0; });
       dados.forEach(row => {
         const v = toNum(row[colValor]);
         if (isNaN(v)) return;
@@ -723,14 +725,30 @@ function parseOFX(text) {
   const blocos = [...body.matchAll(/<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi)].map(m => m[1]);
   if (!blocos.length) throw new Error('Nenhuma transação encontrada no arquivo OFX.');
 
+  // Decodes HTML entities including named + numeric
+  function decodeEnt(s) {
+    return s
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  }
+
   // Extrai valor do campo: funciona com tags sem fechamento (SGML) e com (XML)
   function campo(bloco, tag) {
     const m = new RegExp(`<${tag}>([^<\\r\\n]*)`, 'i').exec(bloco);
-    return m ? m[1].trim() : '';
+    return m ? decodeEnt(m[1].trim()) : '';
   }
 
-  // YYYYMMDD[HHMMSS[tz]] → DD/MM/YYYY
+  // Handles YYYYMMDD[HHMMSS[tz]] and ISO YYYY-MM-DD → DD/MM/YYYY
   function parseDt(dt) {
+    // ISO: 2024-01-15 or 2024-01-15T10:30:00
+    const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(dt);
+    if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+    // OFX SGML: 20240115 or 20240115120000[-3:BRT]
     const s = dt.replace(/[^\d].*/, '').slice(0, 8);
     return s.length === 8 ? `${s.slice(6)}/${s.slice(4,6)}/${s.slice(0,4)}` : '';
   }
@@ -743,10 +761,10 @@ function parseOFX(text) {
 
   const dados = blocos.map(b => {
     const data  = parseDt(campo(b, 'DTPOSTED'));
-    const valor = parseFloat((campo(b, 'TRNAMT') || '0').replace(',', '.')) || 0;
-    const descr = (campo(b, 'MEMO') || campo(b, 'NAME') || '')
-                    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
-    const id    = campo(b, 'FITID');
+    const valor = toNum(campo(b, 'TRNAMT') || '0');
+    const descr = campo(b, 'MEMO') || campo(b, 'NAME') || '';
+    // Synthetic FITID when missing to avoid false auditoria CRÍTICA
+    const id    = campo(b, 'FITID') || `ofx-${data}-${valor}`;
     const tipo  = TIPO_MAP[(campo(b, 'TRNTYPE') || '').toUpperCase()] || campo(b, 'TRNTYPE');
     return { 'Data': data, 'Vencimento': data, 'Valor': valor, 'Descrição': descr, 'ID': id, 'Tipo': tipo };
   });
@@ -1359,19 +1377,20 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
     <h2 style="color:#5B21B6">Análise com Inteligência Artificial</h2>
     <p style="font-size:12px;color:#6B7280;margin:0 0 14px">
       Insira sua chave de API para obter uma análise automática e inteligente dos dados carregados.
-      A chave é salva <strong>apenas neste navegador</strong> (localStorage) para sua conveniência — nunca enviada a servidores próprios. Use "Limpar" para removê-la.
+      A chave é salva <strong>apenas nesta sessão do navegador</strong> (sessionStorage) — apagada ao fechar a aba e nunca enviada a servidores próprios. Use "Limpar" para removê-la imediatamente.
     </p>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <input id="claude-api-key" type="password" placeholder="sk-ant-api03-..."
+        autocomplete="off" autocorrect="off" spellcheck="false"
         style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #C4B5FD;border-radius:8px;font-size:13px;font-family:inherit;outline:none;color:#1F1B4B"
-        oninput="try{localStorage.setItem('_cak',this.value)}catch(e){}"
+        oninput="try{sessionStorage.setItem('_cak',this.value)}catch(e){}"
         onkeydown="if(event.key==='Enter')analisarComClaude(document.getElementById('btn-analisar-claude'))">
       <button id="btn-analisar-claude"
         style="background:#7C3AED;color:#fff;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap"
         onclick="analisarComClaude(this)">Analisar</button>
       <button title="Esquecer chave salva"
         style="background:#EDE9FE;color:#7C3AED;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600"
-        onclick="localStorage.removeItem('_cak');document.getElementById('claude-api-key').value='';alert('Chave removida.')">Limpar</button>
+        onclick="sessionStorage.removeItem('_cak');document.getElementById('claude-api-key').value='';alert('Chave removida.')">Limpar</button>
     </div>
     <div id="claude-resultado" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -1481,6 +1500,31 @@ document.getElementById('file-input').addEventListener('change', e => {
   }
 });
 
+// Detects OFX encoding from ArrayBuffer: checks BOM, XML declaration, SGML header.
+// Fallback chain: utf-8-sig → utf-8 → windows-1252 (legacy Brazilian banks).
+function _decodeOFXBuffer(buffer) {
+  const bytes = new Uint8Array(buffer);
+  // UTF-8 BOM
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+  // Peek at first 1 KB as ASCII to inspect OFX/XML header
+  const peek = new TextDecoder('ascii', { fatal: false }).decode(bytes.slice(0, 1024));
+  // XML OFX 2.x: <?xml ... encoding="UTF-8" ?>
+  if (/encoding\s*=\s*["']?utf-8/i.test(peek)) {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+  // OFX SGML header: ENCODING:UTF-8
+  if (/^ENCODING\s*:\s*UTF-?8/im.test(peek)) {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+  // Modern banks without explicit header: try UTF-8 first
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+  if (!utf8.includes('�')) return utf8;
+  // Fallback: windows-1252 (Itaú, Bradesco, Santander legacy)
+  return new TextDecoder('windows-1252').decode(buffer);
+}
+
 // ══════════════════════════════════════════════════════
 // CARREGAR ARQUIVO
 // ══════════════════════════════════════════════════════
@@ -1498,7 +1542,9 @@ function carregarArquivo(file) {
     try {
       let dados, headers;
       if (file.name.toLowerCase().endsWith('.ofx')) {
-        ({ headers, dados } = parseOFX(e.target.result));
+        const buf  = e.target.result;
+        const text = _decodeOFXBuffer(buf);
+        ({ headers, dados } = parseOFX(text));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX.');
       } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
         const txt   = e.target.result;
@@ -1570,7 +1616,7 @@ function carregarArquivo(file) {
   };
   reader.onerror = () => { mostrarLoader(false); alert('Erro ao ler o arquivo. Verifique se ele não está aberto em outro programa.'); };
   if (file.name.toLowerCase().endsWith('.ofx'))
-    reader.readAsText(file, 'windows-1252');
+    reader.readAsArrayBuffer(file);
   else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
     reader.readAsText(file, 'utf-8');
   else
@@ -1597,7 +1643,9 @@ function carregarArquivoComparativo(file) {
     try {
       let dados, headers;
       if (file.name.toLowerCase().endsWith('.ofx')) {
-        ({ headers, dados } = parseOFX(e.target.result));
+        const buf  = e.target.result;
+        const text = _decodeOFXBuffer(buf);
+        ({ headers, dados } = parseOFX(text));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX comparativo.');
       } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
         const sep = file.name.toLowerCase().endsWith('.tsv') ? '\t' : undefined;
@@ -1643,7 +1691,7 @@ function carregarArquivoComparativo(file) {
   };
   reader.onerror = () => { mostrarLoader(false); alert('Erro ao ler o arquivo comparativo. Verifique se ele não está aberto em outro programa.'); };
   if (file.name.toLowerCase().endsWith('.ofx'))
-    reader.readAsText(file, 'windows-1252');
+    reader.readAsArrayBuffer(file);
   else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
     reader.readAsText(file, 'utf-8');
   else reader.readAsArrayBuffer(file);
@@ -1712,8 +1760,8 @@ function lerColsSelecionadas() {
   const tipos = ['valor','data','vencimento','entidade','chave','categoria'];
   const c = {};
   tipos.forEach(t => { c[t] = document.getElementById(`sel-${t}`)?.value || null; });
-  // tipo é detectado automaticamente pelo ERP/detectarColunas — não exposto na UI
-  c.tipo = _cols.tipo || null;
+  // Re-detect 'tipo' from current headers to avoid stale value after ERP remapping
+  c.tipo = detectarColunas(_headers).tipo || null;
   return c;
 }
 
@@ -2215,7 +2263,7 @@ Destaque valores monetários no formato brasileiro: R$ 1.234,56.`;
 function abrirPainelClaude() {
   const card  = document.getElementById('card-claude');
   const input = document.getElementById('claude-api-key');
-  const saved = localStorage.getItem('_cak');
+  const saved = sessionStorage.getItem('_cak');
   if (saved) input.value = saved;
   card.style.display = 'block';
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2442,6 +2490,7 @@ function baixarTemplate() {
 }
 
 function exportarJSON() {
+  if (!_dadosOriginais.length) { alert('Nenhum dado carregado para exportar.'); return; }
   const _par = _ultimoPareto ?? calcularPareto(_dadosOriginais, _cols.entidade, _cols.valor);
   const obj = {
     arquivo:   _nomeArquivo,
@@ -2452,12 +2501,15 @@ function exportarJSON() {
     dre:       _ultimoDre        ?? construirDRE(_dadosOriginais, _cols.categoria, _cols.valor),
     pareto: _par ? { items: Array.from(_par), totalEntidades: _par.totalEntidades, totalGeral: _par.totalGeral } : null,
   };
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)], {type:'application/json'}));
+  const url  = URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)], {type:'application/json'}));
   const base = (_nomeArquivo || 'export').replace(/\.[^.]+$/,'');
+  const a    = document.createElement('a');
+  a.href     = url;
   a.download = `analise_${base}_${Date.now()}.json`;
+  document.body.appendChild(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 // PWA — Service Worker

@@ -62,7 +62,7 @@ metas:
 # Validação de configuração
 validacao:
   obrigatoria: true
-  falhar_em_config_invalida: false  # true = encerra em config inválida
+  falhar_em_config_invalida: true   # false = continua com config inválida (perigoso)
 
 # Alertas por e-mail (deixe vazio para desativar)
 email:
@@ -81,7 +81,7 @@ email:
 
 # Integração Claude API (análise automática de briefings)
 claude_api:
-  ativo: true                           # true para habilitar análise automática
+  ativo: false                          # true para habilitar (requer ANTHROPIC_API_KEY)
   modelo: "claude-opus-4-7"
   max_tokens: 1024
   prompt_sistema: "prompt_sistema.md"   # caminho relativo ao arquivo de sistema

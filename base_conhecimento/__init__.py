@@ -280,7 +280,7 @@ MAPAS_ERP: Dict[str, dict] = {
 
     # ── Bling ─────────────────────────────────────────────────
     'BLING': {
-        'sinais': ['numero', 'contato', 'situacao'],
+        'sinais': ['numero', 'contato', 'situacao', 'cnpjcpf'],
         'colunas': {
             'numero':     'NF',
             'data':       'Data',
@@ -309,7 +309,7 @@ MAPAS_ERP: Dict[str, dict] = {
 
     # ── GestãoClick ──────────────────────────────────────────
     'GESTAO_CLICK': {
-        'sinais': ['Código', 'Cliente', 'Vencimento'],
+        'sinais': ['Código', 'Cliente', 'Vencimento', 'Categoria'],
         'colunas': {
             'Código':     'NF',
             'Data':       'Data',

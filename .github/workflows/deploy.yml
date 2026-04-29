@@ -6,9 +6,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    name: Verificar testes antes do deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -q --tb=short
+
   build-obfuscated:
     name: Obfuscar JS e publicar no gh-pages
+    needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       pages: write
@@ -29,7 +44,13 @@ jobs:
         run: python3 scripts/obfuscar_html.py index.html dist/index.html
 
       - name: Copiar assets PWA
-        run: cp manifest.json dist/manifest.json && cp sw.js dist/sw.js
+        run: |
+          mkdir -p dist
+          cp -v manifest.json dist/manifest.json
+          cp -v sw.js dist/sw.js
+
+      - name: Bump SW cache version
+        run: sed -i -E "s/(CACHE_NAME = ')pfp-v[0-9]+/\1pfp-v${{ github.run_number }}/" dist/sw.js
 
       - name: Bump SW cache version
         run: sed -i "s/pfp-v[0-9]*/pfp-v${{ github.run_number }}/" dist/sw.js
@@ -43,6 +64,10 @@ jobs:
           assert 'Luan Guilherme' in c, 'Branding ausente no dist'
           print('dist/index.html: OK')
           "
+          test -f dist/sw.js || (echo 'sw.js ausente!' && exit 1)
+          test -f dist/manifest.json || (echo 'manifest.json ausente!' && exit 1)
+          grep -q 'pfp-v${{ github.run_number }}' dist/sw.js || (echo 'Cache version não bumped!' && exit 1)
+          echo 'Assets PWA: OK'
 
       - name: Deploy para gh-pages
         uses: peaceiris/actions-gh-pages@v4
@@ -50,5 +75,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           publish_branch: gh-pages
-          force_orphan: true
+          force_orphan: false
           commit_message: "deploy: ${{ github.sha }}"
