@@ -439,8 +439,8 @@ function construirDRE(dados, colCat, colValor) {
       dados.forEach(row => {
         const v = toNum(row[colValor]);
         if (isNaN(v)) return;
-        if (v >= 0) valores['Receita Bruta'] += v;
-        else valores['(-) Despesas Operacionais'] += v;
+        if (v > 0) valores['Receita Bruta'] += v;
+        else if (v < 0) valores['(-) Despesas Operacionais'] += v;
       });
     }
   }
@@ -906,8 +906,9 @@ body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:#E8EDF4;
 .check-ok{background:#D1FAE5;color:#065F46}
 .check-info{background:#EFF6FF;color:#1E40AF}
 .check-alerta,.check-media,.check-parcial{background:#FEF3C7;color:#92400E}
-.check-divergente,.check-baixa{background:#FEE2E2;color:#991B1B}
-.check-alta{background:#D1FAE5;color:#065F46}
+.check-divergente{background:#FEE2E2;color:#991B1B}
+.check-baixa{background:#D1FAE5;color:#065F46}
+.check-alta{background:#FEF3C7;color:#92400E}
 .check-item{margin-bottom:6px}
 .check-como{font-size:11px;color:#64748B;background:#F8FAFC;border-left:3px solid #CBD5E1;
   padding:6px 10px;margin-bottom:4px;border-radius:0 6px 6px 0;line-height:1.5}
@@ -1438,7 +1439,7 @@ function carregarArquivo(file) {
   reader.onload = e => {
     try {
       let dados, headers;
-      if (file.name.toLowerCase().endsWith('.csv')) {
+      if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv')) {
         const txt   = e.target.result;
         const wb    = XLSX.read(txt, { type:'string', raw:false });
         const ws    = wb.Sheets[wb.SheetNames[0]];
@@ -1529,7 +1530,7 @@ function carregarArquivoComparativo(file) {
   reader.onload = e => {
     try {
       let dados, headers;
-      if (file.name.toLowerCase().endsWith('.csv')) {
+      if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv')) {
         const wb  = XLSX.read(e.target.result, { type:'string', raw:false });
         const ws  = wb.Sheets[wb.SheetNames[0]];
         const arr = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
@@ -1810,7 +1811,7 @@ function renderVerificacao(integ) {
     const como = c.como
       ? `<div class="check-como"><strong>Como investigar:</strong> ${esc(c.como)}</div>`
       : '';
-    return `<div class="check-item">${como}<span class="${cls}">${c.status} — ${c.nome}: ${c.detalhe}</span></div>`;
+    return `<div class="check-item">${como}<span class="${cls}">${esc(c.status)} — ${esc(c.nome)}: ${esc(c.detalhe)}</span></div>`;
   }).join('');
 
   cont.innerHTML = `
