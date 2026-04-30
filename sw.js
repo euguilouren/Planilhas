@@ -15,7 +15,8 @@ const CDN_HOSTS = new Set([
   'cdn.jsdelivr.net',
   'cdnjs.cloudflare.com',
   'fonts.googleapis.com',
-  'fonts.gstatic.com'
+  'fonts.gstatic.com',
+  'cdn.sheetjs.com'
 ]);
 
 // Max age for CDN cached assets (24h) — forces revalidation for security updates

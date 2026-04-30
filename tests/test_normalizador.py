@@ -100,7 +100,7 @@ class TestValidar:
 
     def test_detecta_campo_obrigatorio_vazio(self):
         df = self._df_valido()
-        df.loc[1, 'Categoria'] = ''
+        df.loc[1, 'NF'] = ''
         problemas = Normalizador.validar(df)
         tipos = [p['tipo'] for p in problemas]
         assert 'CAMPO_OBRIGATORIO_VAZIO' in tipos

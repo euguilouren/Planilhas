@@ -455,8 +455,8 @@ function construirDRE(dados, colCat, colValor) {
       dados.forEach(row => {
         const v = toNum(row[colValor]);
         if (isNaN(v)) return;
-        if (v >= 0) valores['Receita Bruta'] += v;
-        else valores['(-) Despesas Operacionais'] += v;
+        if (v > 0) valores['Receita Bruta'] += v;
+        else if (v < 0) valores['(-) Despesas Operacionais'] += v;
       });
     }
   }
@@ -1630,7 +1630,9 @@ function abrirComparativo() {
   const inp = document.createElement('input');
   inp.type = 'file';
   inp.accept = '.xlsx,.xls,.csv,.xlsm,.ofx';
-  inp.onchange = e => { if (e.target.files[0]) carregarArquivoComparativo(e.target.files[0]); };
+  inp.style.display = 'none';
+  inp.onchange = e => { if (e.target.files[0]) carregarArquivoComparativo(e.target.files[0]); document.body.removeChild(inp); };
+  document.body.appendChild(inp);
   inp.click();
 }
 
@@ -1711,16 +1713,18 @@ function mostrarConfigColunas(headers, cols, erpDetectado) {
   const banner = document.getElementById('erp-banner');
   if (erpDetectado) {
     banner.style.display = 'flex';
-    banner.innerHTML = `<span class="erp-badge-tag">${erpDetectado.nome}</span>
+    banner.innerHTML = `<span class="erp-badge-tag">${esc(erpDetectado.nome)}</span>
       <span>Sistema detectado automaticamente</span>
       <span class="erp-confianca">— colunas pré-preenchidas</span>`;
     // Pre-select ERP dropdown
     const selErp = document.getElementById('sel-erp-sistema');
     if (selErp) selErp.value = erpDetectado.erp;
-    // Merge ERP column mapping into cols
+    // Merge ERP column mapping into a local copy — never mutate the caller's _cols
+    const localCols = Object.assign({}, cols);
     Object.entries(erpDetectado.mapa).forEach(([orig, campo]) => {
-      if (headers.includes(orig) && !cols[campo]) cols[campo] = orig;
+      if (headers.includes(orig) && !localCols[campo]) localCols[campo] = orig;
     });
+    cols = localCols;
     _toast(`ERP detectado: ${erpDetectado.nome}`);
   } else {
     banner.style.display = 'none';
@@ -2381,7 +2385,7 @@ async function analisarComClaude(btn) {
         'anthropic-dangerous-allow-browser': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-7',
+        model: 'claude-opus-4-5',
         max_tokens: 2048,
         system: _CLAUDE_SYSTEM,
         messages: [{ role: 'user', content: _gerarBriefing() }],

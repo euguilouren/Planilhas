@@ -76,7 +76,7 @@ class AnalisadorClaudeAPI:
     def __init__(self, cfg: dict):
         self.cfg_api = cfg.get('claude_api', {})
         self.ativo   = self.cfg_api.get('ativo', False)
-        self.modelo  = self.cfg_api.get('modelo', 'claude-opus-4-7')
+        self.modelo  = self.cfg_api.get('modelo', 'claude-opus-4-5')
         self.max_tok = self.cfg_api.get('max_tokens', 1024)
         self._client = None
         self._system_prompt = ''
@@ -769,10 +769,6 @@ class ProcessadorArquivo:
             pts_a = 0
             if df_aging is not None and len(df_aging):
                 total_ag = df_aging['Total_RS'].sum() if 'Total_RS' in df_aging.columns else 0
-                vencido  = df_aging[df_aging.get('Faixa_Aging', df_aging.columns[0]).name
-                    if hasattr(df_aging.get('Faixa_Aging', None), 'name') else 'Faixa_Aging'
-                    ]['Total_RS'].sum() if 'Faixa_Aging' in df_aging.columns else 0
-                # Simpler: sum all rows that aren't "A vencer"
                 col_faixa = next((c for c in df_aging.columns if 'faixa' in c.lower()), None)
                 if col_faixa and 'Total_RS' in df_aging.columns:
                     vencido  = df_aging[~df_aging[col_faixa].str.contains('vencer|Sem', na=False)]['Total_RS'].sum()
@@ -795,8 +791,8 @@ class ProcessadorArquivo:
             linhas.append(f"  Margem ({pts_m}/30) | Inadimplência ({pts_a}/25) | Concentração ({pts_p}/20) | Auditoria ({pts_aud}/25)")
             linhas.append(f"  Margem líquida: {margem:.1f}% | Críticos auditoria: {criticos}")
             linhas.append("")
-        except Exception:
-            pass  # Score é informativo — não bloquear briefing em caso de erro
+        except Exception as _e:
+            logging.getLogger(__name__).warning("Score financeiro não calculado: %s", _e)
 
         linhas += [
             "---",

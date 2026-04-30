@@ -278,11 +278,7 @@ class GeradorHTML:
             imp = r.get('Impacto R$', '')
             try:
                 imp_val = float(imp)
-                imp_str = f"R$ {imp_val:_.2f}".replace('_', '.').replace('.', ',', 1) if imp and str(imp) not in ('', '0', '0.0') else '—'
-                if imp_str != '—':
-                    # Formato pt-BR: ponto como separador de milhar, vírgula como decimal
-                    parts = f"{imp_val:,.2f}".split('.')
-                    imp_str = 'R$ ' + parts[0].replace(',', '.') + ',' + parts[1]
+                imp_str = self._fmt_brl(imp_val) if imp and str(imp) not in ('', '0', '0.0') else '—'
             except (ValueError, TypeError):
                 imp_str = '—'
             rows += (f"<tr><td>{self._badge(sev)}</td>"

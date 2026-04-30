@@ -509,7 +509,7 @@ class Auditor:
             if len(vazios) > 0:
                 inconsistencias.append({
                     'aba': aba, 'linha': (vazios.index + 2).tolist()[:10],
-                    'coluna': col, 'tipo': 'CAMPO_VAZIO', 'severidade': Status.MEDIA,
+                    'coluna': col, 'tipo': 'CAMPO_VAZIO', 'severidade': Status.CRITICA,
                     'valor': f"{len(vazios)} registros",
                     'descricao': f"{len(vazios)} registros sem '{col}' preenchido",
                     'impacto_rs': 0,
@@ -816,7 +816,7 @@ class AnalistaFinanceiro:
         df['Dias_Atraso'] = dias.clip(lower=0)
         resumo = df.groupby('Faixa_Aging').agg(
             Quantidade=(col_valor, 'count'),
-            Total_RS=(col_valor, 'sum'),
+            Total_RS=(col_valor, lambda x: pd.to_numeric(x, errors='coerce').abs().sum()),
         ).reset_index()
         ordem = ['A vencer', _lbl_1, _lbl_2, _lbl_3, _lbl_4, 'Sem data']
         resumo['_ord'] = resumo['Faixa_Aging'].map({f: i for i, f in enumerate(ordem)})
@@ -912,7 +912,7 @@ class AnalistaFinanceiro:
                 if i > 0:
                     anterior, atual = row[cols[i - 1]], row[col]
                     r[f'Var_{cols[i-1]}_para_{col}_R$'] = round(atual - anterior, 2)
-                    r[f'Var_{cols[i-1]}_para_{col}_%']  = round((atual - anterior) / anterior * 100, 1) if anterior != 0 else 0
+                    r[f'Var_{cols[i-1]}_para_{col}_%']  = round((atual - anterior) / anterior * 100, 1) if anterior != 0 else None
             result_rows.append(r)
         return pd.DataFrame(result_rows)
 
@@ -1027,12 +1027,12 @@ class AnalistaFinanceiro:
 
         # Inferir Tipo se coluna ausente
         if col_tipo not in df.columns:
-            df['_tipo'] = df['_valor'].apply(lambda v: 'RECEITA' if v >= 0 else 'DESPESA')
+            df['_tipo'] = df['_valor'].apply(lambda v: 'RECEITA' if v > 0 else 'DESPESA')
         else:
             _tipo = df[col_tipo].astype(str).str.upper().str.strip()
             df['_tipo'] = _tipo.where(_tipo.isin(['RECEITA', 'DESPESA']),
                                       other=df['_valor'].apply(
-                                          lambda v: 'RECEITA' if v >= 0 else 'DESPESA'))
+                                          lambda v: 'RECEITA' if v > 0 else 'DESPESA'))
 
         df_valid = df.dropna(subset=['_data']).copy()
         if df_valid.empty:
@@ -1910,11 +1910,11 @@ class Normalizador:
          'descricao': 'Número da Nota Fiscal ou ID único do lançamento'},
         {'nome': 'Data',       'tipo': 'data',   'obrigatorio': True,
          'descricao': 'Data de emissão (DD/MM/AAAA)'},
-        {'nome': 'Vencimento', 'tipo': 'data',   'obrigatorio': True,
+        {'nome': 'Vencimento', 'tipo': 'data',   'obrigatorio': False,
          'descricao': 'Data de vencimento (DD/MM/AAAA)'},
         {'nome': 'Valor',      'tipo': 'moeda',  'obrigatorio': True,
          'descricao': 'Valor em R$ (número, ponto como decimal)'},
-        {'nome': 'Categoria',  'tipo': 'lista',  'obrigatorio': True,
+        {'nome': 'Categoria',  'tipo': 'lista',  'obrigatorio': False,
          'opcoes': ['RECEITA', 'CMV', 'DESPESA OPERACIONAL',
                     'DESPESA FINANCEIRA', 'IMPOSTO', 'OUTRO'],
          'descricao': 'Categoria do lançamento'},

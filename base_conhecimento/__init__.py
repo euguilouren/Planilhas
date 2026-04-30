@@ -120,7 +120,7 @@ MAPAS_ERP: Dict[str, dict] = {
             'PaidToDate': 'Valor_Pago',
             'DocStatus':  'Status',
             'TransId':    'ID_Lancamento',
-            'RefDate':    'Data',
+            'RefDate':    'Data_Referencia',
             'Account':    'Conta',
             'LineMemo':   'Historico',
             'ProfitCode': 'Centro_Custo',
