@@ -2485,7 +2485,10 @@ function _atualizarPreview(tipo) {
   if (!sel || !prev) return;
   const col = sel.value;
   if (!col || !_dadosOriginais.length) { prev.textContent = ''; return; }
-  const amostras = _dadosOriginais.slice(0,3).map(r => String(r[col]??'—')).filter(v=>v&&v!=='—');
+  // Date object (XLSX cellDates:true) viraria string US verbosa em String(v).
+  // Mesmo tratamento que renderTabela (linha ~3074): fmtData → DD/MM/YYYY.
+  const _amostra = v => v instanceof Date ? fmtData(v) : String(v ?? '—');
+  const amostras = _dadosOriginais.slice(0,3).map(r => _amostra(r[col])).filter(v=>v&&v!=='—');
   prev.textContent = amostras.length ? `ex: ${amostras.join(' · ')}` : '';
 }
 
