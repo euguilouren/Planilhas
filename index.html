@@ -3301,9 +3301,13 @@ function _parseDataBR(s) {
     return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
   }
   if (typeof s === 'number') {
+    // Excel serial: read as UTC para evitar day-1 em fuso negativo (UTC-3).
+    // new Date(ms).getFullYear() retorna LOCAL — em UTC-3, o dia 15/03 vira
+    // 14/03 às 21:00 local. Consequência: filtro de data excluía registros
+    // do dia correto. Casa o comportamento de toDate (analise.js:238-243).
     const d = new Date(Math.round((s - 25569) * 86400 * 1000));
     if (isNaN(d)) return null;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
   }
   const m1 = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
