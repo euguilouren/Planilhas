@@ -656,11 +656,19 @@ function calcularProjecao(linhas, nProjecoes) {
   const lrDesp = _lr(linhas.map(function(l) { return l.despesa; }));
   const nomesMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const last = linhas[n - 1];
-  let baseAno = 2000, baseMes = 0;
+  let baseAno = new Date().getFullYear(), baseMes = 0;
   if (last && last.periodo) {
+    // Aceita 3 formatos vindos de calcularFluxoPeriodo:
+    //   freq='M' → "MM/YYYY"          ex: "03/2024"
+    //   freq='D' → "DD/MM/YYYY"       ex: "15/03/2024"
+    //   freq='A' → "YYYY"             ex: "2024"
     const p = last.periodo.split('/');
-    if (p.length === 2) { baseMes = parseInt(p[0], 10) - 1; baseAno = parseInt(p[1], 10); }
+    if (p.length === 3)      { baseMes = parseInt(p[1], 10) - 1; baseAno = parseInt(p[2], 10); }
+    else if (p.length === 2) { baseMes = parseInt(p[0], 10) - 1; baseAno = parseInt(p[1], 10); }
+    else if (p.length === 1) { baseAno = parseInt(p[0], 10);     baseMes = 11; /* projeção continua no ano seguinte */ }
   }
+  if (!isFinite(baseAno)) baseAno = new Date().getFullYear();
+  if (!isFinite(baseMes)) baseMes = 0;
   return Array.from({ length: nProjecoes }, function(_, k) {
     const idx = n + k;
     const rec  = Math.max(0, Math.round((lrRec.a  + lrRec.b  * idx) * 100) / 100);
@@ -1062,6 +1070,37 @@ function calcularKPIsComparativo(kpisA, kpisB) {
 
 // Exportar para uso no app.js
 // (module.exports removido para uso direto no navegador)
+
+// ══════════════════════════════════════════════════════
+// DECODER DE TEXTO COM FALLBACK DE ENCODING
+// ══════════════════════════════════════════════════════
+// Decodes an ArrayBuffer as text with encoding probe.
+// Honra UTF-8 BOM, tenta UTF-8 estrito, e cai para windows-1252
+// (usado por ERPs/bancos BR legacy: Bradesco, Itaú, Santander, SAP velho).
+// Sem isso, CSVs Latin-1 viravam '?' silenciosamente em produção.
+function _decodeTextBuffer(buffer) {
+  if (typeof TextDecoder === 'undefined') return String(buffer || '');
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch (_) {
+    return new TextDecoder('windows-1252').decode(buffer);
+  }
+}
+
+// Probe específico de header OFX/XML antes do fallback genérico.
+function _decodeOFXBuffer(buffer) {
+  if (typeof TextDecoder === 'undefined') return String(buffer || '');
+  const bytes = new Uint8Array(buffer);
+  const peek = new TextDecoder('ascii', { fatal: false }).decode(bytes.slice(0, 1024));
+  if (/encoding\s*=\s*["']?utf-8/i.test(peek) || /^ENCODING\s*:\s*UTF-?8/im.test(peek)) {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+  return _decodeTextBuffer(buffer);
+}
 
 // ══════════════════════════════════════════════════════
 // OFX — PARSER DE EXTRATO BANCÁRIO (SGML e XML)
@@ -2159,31 +2198,6 @@ function _mostrarErroTipo(nome) {
   _toast(`Formato "${ext}" não suportado. Use Excel (.xlsx / .xls / .xlsm), CSV, TSV ou OFX.`, 5000, 'erro');
 }
 
-// Detects OFX encoding from ArrayBuffer: checks BOM, XML declaration, SGML header.
-// Fallback chain: utf-8-sig → utf-8 → windows-1252 (legacy Brazilian banks).
-function _decodeOFXBuffer(buffer) {
-  const bytes = new Uint8Array(buffer);
-  // UTF-8 BOM
-  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
-    return new TextDecoder('utf-8').decode(buffer);
-  }
-  // Peek at first 1 KB as ASCII to inspect OFX/XML header
-  const peek = new TextDecoder('ascii', { fatal: false }).decode(bytes.slice(0, 1024));
-  // XML OFX 2.x: <?xml ... encoding="UTF-8" ?>
-  if (/encoding\s*=\s*["']?utf-8/i.test(peek)) {
-    return new TextDecoder('utf-8').decode(buffer);
-  }
-  // OFX SGML header: ENCODING:UTF-8
-  if (/^ENCODING\s*:\s*UTF-?8/im.test(peek)) {
-    return new TextDecoder('utf-8').decode(buffer);
-  }
-  // Modern banks without explicit header: try UTF-8 first
-  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-  if (!utf8.includes('�')) return utf8;
-  // Fallback: windows-1252 (Itaú, Bradesco, Santander legacy)
-  return new TextDecoder('windows-1252').decode(buffer);
-}
-
 // ══════════════════════════════════════════════════════
 // CARREGAR ARQUIVO
 // ══════════════════════════════════════════════════════
@@ -2206,7 +2220,7 @@ function carregarArquivo(file) {
         ({ headers, dados } = parseOFX(text));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX.');
       } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
-        let txt = e.target.result;
+        let txt = _decodeTextBuffer(e.target.result);
         if (txt.charCodeAt(0) === 0xFEFF) txt = txt.slice(1); // remove UTF-8 BOM
         const sep   = file.name.toLowerCase().endsWith('.tsv') ? '\t' : undefined;
         const wb    = XLSX.read(txt, { type:'string', raw:false, FS: sep });
@@ -2316,12 +2330,9 @@ function carregarArquivo(file) {
     }
   };
   reader.onerror = () => { _mostrarErro('Erro ao ler o arquivo. Verifique se ele não está aberto em outro programa.'); };
-  if (file.name.toLowerCase().endsWith('.ofx'))
-    reader.readAsArrayBuffer(file);
-  else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
-    reader.readAsText(file, 'utf-8');
-  else
-    reader.readAsArrayBuffer(file);
+  // Sempre lê como ArrayBuffer: CSV/TSV passam por _decodeTextBuffer
+  // (UTF-8 → fallback windows-1252) para suportar ERPs BR legados.
+  reader.readAsArrayBuffer(file);
 }
 
 // ══════════════════════════════════════════════════════
@@ -2357,7 +2368,7 @@ function carregarArquivoComparativo(file) {
         ({ headers, dados } = parseOFX(text));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX comparativo.');
       } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
-        let _csvTxt = e.target.result;
+        let _csvTxt = _decodeTextBuffer(e.target.result);
         if (_csvTxt.charCodeAt(0) === 0xFEFF) _csvTxt = _csvTxt.slice(1);
         const sep = file.name.toLowerCase().endsWith('.tsv') ? '\t' : undefined;
         const wb  = XLSX.read(_csvTxt, { type:'string', raw:false, FS: sep });
@@ -2401,11 +2412,7 @@ function carregarArquivoComparativo(file) {
     }
   };
   reader.onerror = () => { _mostrarErro('Erro ao ler o arquivo comparativo. Verifique se ele não está aberto em outro programa.'); };
-  if (file.name.toLowerCase().endsWith('.ofx'))
-    reader.readAsArrayBuffer(file);
-  else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
-    reader.readAsText(file, 'utf-8');
-  else reader.readAsArrayBuffer(file);
+  reader.readAsArrayBuffer(file);
 }
 
 // CONFIG COLUNAS

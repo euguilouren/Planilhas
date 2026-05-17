@@ -27,6 +27,8 @@ const ctx = vm.createContext({
   Boolean,
   Set,
   Map,
+  TextDecoder,
+  Uint8Array,
   console,
   isNaN,
   isFinite,
@@ -70,4 +72,6 @@ export const {
   PADROES_COLUNAS,
   MAPA_DRE,
   MAPAS_ERP_JS,
+  _decodeTextBuffer,
+  _decodeOFXBuffer,
 } = ctx;
