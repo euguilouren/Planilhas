@@ -1426,14 +1426,18 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
 .bar-w{background:#e8e8e8;border-radius:4px;height:10px;min-width:80px}
 .bar-f{height:10px;border-radius:4px;transition:.5s}
 /* Toast */
-#toast{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,24px));left:50%;transform:translateX(-50%) translateY(80px);
-  background:var(--azul);color:#fff;padding:10px 22px;border-radius:20px;
-  font-size:12.5px;font-weight:600;z-index:1000;transition:.3s;pointer-events:none;opacity:0}
+#toast{position:fixed;bottom:max(28px,env(safe-area-inset-bottom,28px));left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--text);color:#fff;padding:12px 22px;border-radius:14px;
+  font-size:13px;font-weight:600;letter-spacing:.1px;z-index:1000;
+  box-shadow:var(--shadow-lg);
+  transition:transform var(--t-base),opacity var(--t-base);
+  pointer-events:none;opacity:0;max-width:calc(100% - 32px)}
 #toast.show{transform:translateX(-50%) translateY(0);opacity:1}
-#toast.toast-erro{background:#9C0006}
-#toast.toast-sucesso{background:#166534}
-#toast.toast-aviso{background:#92400E}
-#toast.toast-info{background:#1e40af}
+#toast.toast-erro{background:var(--vermelho)}
+#toast.toast-sucesso{background:var(--verde)}
+#toast.toast-aviso{background:var(--amarelo)}
+#toast.toast-info{background:var(--navy-2)}
 .loader-step{font-size:11px;color:#64748b;margin-top:5px;font-weight:400;min-height:16px;text-align:center}
 .busca-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-2);padding:2px 5px;border-radius:4px;font-size:15px;line-height:1;display:none}
 .busca-clear.show{display:block}
@@ -1500,15 +1504,22 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
 .chart-box{position:relative;height:280px}
 /* Empty state */
 .empty{text-align:center;padding:40px 24px;color:var(--text-3);font-size:13px;
-  background:linear-gradient(135deg,#FAFBFD,#F4F8FF);border-radius:10px}
+  background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:var(--radius)}
 /* Loader */
-#loader{display:none;position:fixed;inset:0;background:rgba(238,242,247,.92);
-  backdrop-filter:blur(6px);z-index:999;
-  justify-content:center;align-items:center;flex-direction:column;gap:14px}
+#loader{display:none;position:fixed;inset:0;background:rgba(249,250,251,.78);
+  backdrop-filter:blur(8px) saturate(1.4);-webkit-backdrop-filter:blur(8px) saturate(1.4);
+  z-index:999;justify-content:center;align-items:center;flex-direction:column;gap:18px}
+[data-theme="dark"] #loader{background:rgba(11,18,32,.78)}
 #loader.show{display:flex}
-.loader-text{color:var(--navy-2);font-weight:600;font-size:13px;letter-spacing:-.1px}
-.spinner{width:36px;height:36px;border:3px solid var(--border);
-  border-top-color:var(--navy-2);border-radius:50%;animation:spin .7s linear infinite}
+.loader-text{color:var(--navy);font-weight:700;font-size:14px;letter-spacing:-.1px}
+[data-theme="dark"] .loader-text{color:var(--text)}
+/* Spinner duplo — outer ring brand, inner ring navy, mais visual */
+.spinner{width:44px;height:44px;position:relative}
+.spinner::before,.spinner::after{content:'';position:absolute;inset:0;border-radius:50%;
+  border:3px solid transparent;animation:spin 1s cubic-bezier(.65,0,.35,1) infinite}
+.spinner::before{border-top-color:var(--brand);border-right-color:var(--brand)}
+.spinner::after{border-bottom-color:var(--navy-2);border-left-color:var(--navy-2);
+  animation-direction:reverse;animation-duration:1.5s;inset:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* Footer */
 .page-footer{text-align:center;padding:28px 0 40px;margin-top:12px;border-top:1px solid #E2EAF4;background:rgba(255,255,255,.5);border-radius:0 0 16px 16px}
