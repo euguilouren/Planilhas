@@ -877,7 +877,10 @@ function calcularAntiFraude(dados, cols) {
       for (let a = 0; a < itens.length; a++) {
         for (let b = a+1; b < itens.length; b++) {
           const {i:ia, v:va, d:da} = itens[a], {i:ib, v:vb, d:db} = itens[b];
-          if (!isFinite(va) || va <= 0) continue;
+          // Valida ambos os lados — sem !isFinite(vb), `Math.abs(va-NaN)=NaN`
+          // e `NaN > 0.01` é false, gerando duplicata fuzzy fantasma quando
+          // uma das linhas tinha valor não-numérico (ex: campo em branco).
+          if (!isFinite(va) || va <= 0 || !isFinite(vb) || vb <= 0) continue;
           if (Math.abs(va-vb)/va > 0.01) continue;
           if (da && db && Math.abs(da-db) > 30*864e5) continue;
           resultado.duplicatas.push({ tipo:'DUPLICATA_FUZZY', severidade:'ALTA',

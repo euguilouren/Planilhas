@@ -153,4 +153,30 @@ describe('calcularAntiFraude', () => {
     expect(bigAlert.descricao).toMatch(/90/);
     expect(bigAlert.descricao).toMatch(/2 lan[çc]amentos/);
   });
+
+  // Regressão: linha 880 validava `va` mas não `vb`. Se vb=NaN,
+  // `Math.abs(va-NaN)/va = NaN` e `NaN > 0.01 = false` → não continuava,
+  // criando DUPLICATA_FUZZY fantasma quando uma linha tinha valor inválido.
+  it('regressão BUG: valor não-numérico em par de duplicata fuzzy não gera alerta', () => {
+    const dados = [
+      { Valor: 1000,    Cliente: 'ACME', NF: '1' },
+      { Valor: 'texto', Cliente: 'ACME', NF: '2' }, // vb=NaN
+      { Valor: '',      Cliente: 'ACME', NF: '3' }, // vb=NaN
+    ];
+    const r = calcularAntiFraude(dados, COLS);
+    const fuzzy = r.duplicatas.filter(d => d.tipo === 'DUPLICATA_FUZZY');
+    expect(fuzzy).toHaveLength(0);
+  });
+
+  it('duplicata fuzzy LEGÍTIMA com dois valores válidos continua sendo detectada', () => {
+    // Trava do teste anterior — garante que o fix não quebrou detecção real
+    const hoje = new Date();
+    const dados = [
+      { Valor: 1000, Cliente: 'ACME', NF: '1', Data: hoje },
+      { Valor: 1005, Cliente: 'ACME', NF: '2', Data: hoje }, // diff < 1%
+    ];
+    const r = calcularAntiFraude(dados, COLS);
+    const fuzzy = r.duplicatas.filter(d => d.tipo === 'DUPLICATA_FUZZY');
+    expect(fuzzy.length).toBeGreaterThan(0);
+  });
 });
