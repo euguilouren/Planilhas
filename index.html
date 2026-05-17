@@ -4,21 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.sheetjs.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src https://api.anthropic.com; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self';">
-<title>Planilha Financeira Pro — por Luan Guilherme Lourenço</title>
-<meta name="description" content="Dashboard financeiro 100% no navegador. Analise planilhas Excel e CSV com KPIs, aging, DRE e detecção de fraudes — sem instalar nada. Por Luan Guilherme Lourenço.">
+<title>FluxoPRO — por Luan Guilherme Lourenço</title>
+<meta name="description" content="FluxoPRO — dashboard financeiro 100% no navegador. Analise planilhas Excel e CSV com KPIs, aging, DRE e detecção de fraudes — sem instalar nada. Por Luan Guilherme Lourenço.">
 <meta name="author" content="Luan Guilherme Lourenço">
-<meta name="keywords" content="planilha financeira, dashboard financeiro, análise Excel, ERP, KPI, aging, DRE, detecção fraudes, Luan Guilherme Lourenço">
+<meta name="keywords" content="FluxoPRO, fluxo de caixa, dashboard financeiro, análise Excel, ERP, KPI, aging, DRE, detecção fraudes, Luan Guilherme Lourenço">
 <!-- Open Graph -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Planilha Financeira Pro — por Luan Guilherme Lourenço">
+<meta property="og:title" content="FluxoPRO — por Luan Guilherme Lourenço">
 <meta property="og:description" content="Dashboard financeiro 100% no navegador. Analise Excel e CSV com KPIs, aging, DRE e detecção de fraudes — sem instalar nada.">
 <meta property="og:url" content="https://euguilouren.github.io/FluxoPRO/">
 <meta property="og:image" content="https://github.com/euguilouren.png?size=400">
-<meta property="og:site_name" content="Planilha Financeira Pro">
+<meta property="og:site_name" content="FluxoPRO">
 <meta property="og:locale" content="pt_BR">
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Planilha Financeira Pro — por Luan Guilherme Lourenço">
+<meta name="twitter:title" content="FluxoPRO — por Luan Guilherme Lourenço">
 <meta name="twitter:description" content="Dashboard financeiro 100% no navegador — KPIs, aging, DRE e detecção de fraudes em planilhas Excel e CSV.">
 <meta name="twitter:creator" content="@euguilouren">
 <meta name="twitter:image" content="https://github.com/euguilouren.png?size=400">
@@ -29,15 +29,15 @@
 <meta name="theme-color" content="#1F4E79">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Planilha Pro">
+<meta name="apple-mobile-web-app-title" content="FluxoPRO">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "Planilha Financeira Pro",
-  "description": "Dashboard financeiro 100% no navegador. Analise planilhas Excel e CSV com KPIs, aging, DRE e detecção de fraudes — sem instalar nada.",
+  "name": "FluxoPRO",
+  "description": "FluxoPRO — dashboard financeiro 100% no navegador. Analise planilhas Excel e CSV com KPIs, aging, DRE e detecção de fraudes — sem instalar nada.",
   "url": "https://euguilouren.github.io/FluxoPRO/",
   "applicationCategory": "FinanceApplication",
   "operatingSystem": "Any",
@@ -1495,7 +1495,7 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
   .kpi{break-inside:avoid;border:1px solid #ccc!important;box-shadow:none!important}
   #card-claude,#card-comparativo{display:none!important}
   @page{margin:1.5cm;size:A4}
-  .page-footer::after{content:'Relatório gerado por Planilha Financeira Pro — Luan Guilherme Lourenço';
+  .page-footer::after{content:'Relatório gerado por FluxoPRO — Luan Guilherme Lourenço';
     display:block;text-align:center;font-size:9px;color:#666;margin-top:24px;border-top:1px solid #eee;padding-top:8px}
 }
 @media(max-width:900px){
@@ -1653,7 +1653,7 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
       </svg>
     </div>
     <div>
-      <h1>Planilha Financeira Pro</h1>
+      <h1>FluxoPRO</h1>
       <div class="sub">Análise autônoma de planilhas — 100% no navegador, sem upload</div>
       <div style="font-size:11px;opacity:0.75;margin-top:2px;letter-spacing:.3px;">&copy; 2025 <strong style="color:#C9A84C">Luan Guilherme Lourenço</strong> &mdash; Todos os direitos reservados</div>
     </div>
@@ -3448,7 +3448,7 @@ function baixarTemplate() {
   wsInst['!cols'] = [{wch:22},{wch:10},{wch:14},{wch:70}];
   XLSX.utils.book_append_sheet(wb, wsInst, 'INSTRUÇÕES');
 
-  XLSX.writeFile(wb, 'template_planilha_financeira_pro.xlsx');
+  XLSX.writeFile(wb, 'template_fluxopro.xlsx');
   _toast('Template baixado! Preencha e importe aqui.');
 }
 
@@ -3675,7 +3675,7 @@ if ('serviceWorker' in navigator) {
       <rect x="14" y="4" width="4" height="18" rx="1" fill="#1F4E79" opacity=".7"/>
       <rect x="20" y="1" width="2" height="21" rx="1" fill="#1F4E79" opacity=".4"/>
     </svg>
-    <span style="font-size:14px;font-weight:800;color:#1A1A2E;letter-spacing:.2px;">Planilha Financeira Pro</span>
+    <span style="font-size:14px;font-weight:800;color:#1A1A2E;letter-spacing:.2px;">FluxoPRO</span>
   </div>
   <div style="margin-bottom:12px;">
     <span style="display:inline-block;background:var(--navy);color:#fff;padding:6px 22px;border-radius:20px;font-size:12px;font-weight:600;letter-spacing:.3px;">
