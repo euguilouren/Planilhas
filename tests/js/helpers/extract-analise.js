@@ -74,4 +74,7 @@ export const {
   MAPAS_ERP_JS,
   _decodeTextBuffer,
   _decodeOFXBuffer,
+  _formatCellValue,
+  _parseDataBR,
+  _csvEsc,
 } = ctx;
