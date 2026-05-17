@@ -3185,8 +3185,12 @@ function renderTabela(dados, headers) {
   if (!slice.length) {
     tbody.innerHTML = `<tr><td colspan="${headers.length}" style="text-align:center;color:var(--text-3);padding:24px;font-style:italic">Nenhum resultado encontrado.</td></tr>`;
   } else {
+    // Date object (XLSX com cellDates:true) renderiza como
+    // "Mon Mar 15 2024 00:00:00 GMT-0300..." se passar direto pelo String(v).
+    // fmtData formata para DD/MM/YYYY — consistente com filtrarTabela:3148.
+    const _cell = v => v instanceof Date ? esc(fmtData(v)) : esc(v);
     tbody.innerHTML = slice.map(row =>
-      '<tr>' + headers.map(h => `<td>${esc(row[h])}</td>`).join('') + '</tr>'
+      '<tr>' + headers.map(h => `<td>${_cell(row[h])}</td>`).join('') + '</tr>'
     ).join('');
   }
 
