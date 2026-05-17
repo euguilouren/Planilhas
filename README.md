@@ -2,7 +2,7 @@
 
 <img src="https://github.com/euguilouren.png?size=120" width="90" style="border-radius:50%" alt="Luan Guilherme Lourenço">
 
-# Planilha Financeira Pro
+# FluxoPRO
 
 **Dashboard financeiro 100% no navegador**
 
@@ -25,7 +25,7 @@
 
 ## Sobre o Desenvolvedor
 
-**Luan Guilherme Lourenço** é desenvolvedor especializado em automação financeira e soluções de dados para empresas brasileiras. Criou a Planilha Financeira Pro para democratizar análises financeiras profissionais — o que antes exigia horas de trabalho em consultoria, agora acontece em segundos, direto no navegador.
+**Luan Guilherme Lourenço** é desenvolvedor especializado em automação financeira e soluções de dados para empresas brasileiras. Criou o FluxoPRO para democratizar análises financeiras profissionais — o que antes exigia horas de trabalho em consultoria, agora acontece em segundos, direto no navegador.
 
 - **GitHub:** [github.com/euguilouren](https://github.com/euguilouren)
 - **LinkedIn:** [linkedin.com/in/euguilouren](https://linkedin.com/in/euguilouren)

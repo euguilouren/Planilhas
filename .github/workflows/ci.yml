@@ -83,7 +83,7 @@ jobs:
                   content = f.read()
               assert '<!DOCTYPE html>' in content, f'DOCTYPE ausente em {fname}'
               assert 'Luan Guilherme' in content, f'Branding ausente em {fname}'
-              assert 'Planilha Financeira Pro' in content, f'Título ausente em {fname}'
+              assert 'FluxoPRO' in content, f'Título ausente em {fname}'
               print(f'{fname}: OK')
               verificados += 1
           assert verificados >= 1, 'Nenhum index.html encontrado'
@@ -124,7 +124,7 @@ jobs:
           python3 -c "
           with open('/tmp/dist_test.html', encoding='utf-8') as f:
               c = f.read()
-          assert 'Planilha Financeira Pro' in c, 'Título ausente no dist'
+          assert 'FluxoPRO' in c, 'Título ausente no dist'
           assert 'Luan Guilherme' in c, 'Branding ausente no dist'
           assert len(c) > 50000, 'Arquivo dist muito pequeno — obfuscação falhou'
           print('obfuscar_html.py: OK —', len(c), 'chars')

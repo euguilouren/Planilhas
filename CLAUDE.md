@@ -1,4 +1,4 @@
-# CLAUDE.md — Planilha Financeira Pro
+# CLAUDE.md — FluxoPRO
 
 > Guia de arquitetura para refinamentos. Leia antes de qualquer edição.
 
