@@ -3669,10 +3669,22 @@ function _trocarAba(nomAba) {
   _ultimosKpis = null; _ultimaAuditoria = null; _ultimoAging = null;
   _ultimoDre = null; _ultimoPareto = null; _ultimoAntiFraude = null;
   _scoreAnterior = null;
+  _ultimaAnaliseClaude = '';
+  _auditConfirmados.clear();
+  _paginaAtual = 1; _sortCol = null; _sortDir = 1;
+  // Esconde dashboard com dados/charts da aba antiga até usuário clicar Analisar
+  // de novo — antes ficava visível misturando dados antigos com config nova.
+  if (_chartAging)       { _chartAging.destroy();       _chartAging = null; }
+  if (_chartFluxoM)      { _chartFluxoM.destroy();      _chartFluxoM = null; }
+  if (_chartComparativo) { _chartComparativo.destroy(); _chartComparativo = null; }
+  const dash = document.getElementById('dashboard');
+  if (dash) dash.style.display = 'none';
+  _dashboardVisivel = false;
   const det = detectarColunas(_headers);
   // Re-detectar ERP por aba — abas diferentes podem ter schemas diferentes
   _erpDetectado = detectarERP(_headers);
   mostrarConfigColunas(_headers, det, _erpDetectado);
+  _atualizarStep(2);
 }
 
 // ── Atalhos de teclado ─────────────────────────────────
