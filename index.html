@@ -474,13 +474,19 @@ function calcularPareto(dados, colEntidade, colValor, top = 15) {
 // MÓDULO 4: DRE
 // ══════════════════════════════════════════════════════
 
+// Ordem importa: o loop em construirDRE faz `break` no primeiro match.
+// Resultado Financeiro vem ANTES de Despesas Operacionais para que
+// "DESPESA FINANCEIRA"/"DESPESA DE JUROS" não sejam classificadas como
+// despesa operacional — isso distorcia o EBIT (que por norma exclui o
+// resultado financeiro). Pela mesma razão, IR/CSLL vem antes de Despesas
+// Operacionais (caso categoria seja "DESPESA IR" / "DESPESA CSLL").
 const MAPA_DRE = [
   { linha:'(-) Deduções',               termos:/DEDU[CÇ]|IMPOSTO.*VENDA|DEVOLU|ABATIMENTO|PIS|COFINS|ISS|ICMS/ },
   { linha:'Receita Bruta',              termos:/RECEITA|VENDA|FATURAMENTO/ },
   { linha:'(-) CMV/CPV',                termos:/CMV|CPV|CUSTO.*MERCADORIA|CUSTO.*PRODUTO|CUSTO.*VARI/ },
-  { linha:'(-) Despesas Operacionais',  termos:/DESPESA|GASTO|CUSTO[\s_]FIX|FOLHA|PAGAMENTO|SALARIO|ALUGUEL|MARKETING|ENERGIA|TELEFONE|INTERNET|MATERIAL|MANUTENC/ },
   { linha:'(-/+) Resultado Financeiro', termos:/FINANCEI|JUROS|CAMBIAL/ },
-  { linha:'(-) IR\/CSLL',              termos:/\bIR\b|IRPJ|IRRF|IRPF|CSLL|IMPOSTO.*RENDA|CONTRIBUI.*SOCIAL/ },
+  { linha:'(-) IR\/CSLL',               termos:/\bIR\b|IRPJ|IRRF|IRPF|CSLL|IMPOSTO.*RENDA|CONTRIBUI.*SOCIAL/ },
+  { linha:'(-) Despesas Operacionais',  termos:/DESPESA|GASTO|CUSTO[\s_]FIX|FOLHA|PAGAMENTO|SALARIO|ALUGUEL|MARKETING|ENERGIA|TELEFONE|INTERNET|MATERIAL|MANUTENC/ },
 ];
 
 function construirDRE(dados, colCat, colValor) {
@@ -3627,8 +3633,11 @@ function exportarCSV() {
   const dados = _dadosVisivelArr.length ? _dadosVisivelArr : _dadosOriginais;
   if (!dados.length) { _toast('Sem dados para exportar', 2500, 'aviso'); return; }
   if (typeof XLSX === 'undefined') { _toast('SheetJS não carregado', 2500, 'erro'); return; }
+  // Anti CSV/Formula injection (OWASP). Aplicado em HEADERS e células — sem o
+  // escape no header, planilha de origem com coluna nomeada "=HYPERLINK(...)"
+  // viraria fórmula executável ao abrir o CSV exportado no Excel.
   const _csvEsc = v => { const s = String(v ?? ''); return /^[=+\-@\t\r]/.test(s) ? "'" + s : s; };
-  const rows = [_headers, ...dados.map(r => _headers.map(h => _csvEsc(r[h])))];
+  const rows = [_headers.map(_csvEsc), ...dados.map(r => _headers.map(h => _csvEsc(r[h])))];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb2 = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb2, ws, 'Dados');
