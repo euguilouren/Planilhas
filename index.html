@@ -2211,6 +2211,10 @@ function _mostrarErroTipo(nome) {
 // CARREGAR ARQUIVO
 // ══════════════════════════════════════════════════════
 function carregarArquivo(file) {
+  if (_analisandoAgora) {
+    _toast('Aguarde a análise atual terminar antes de carregar outro arquivo.', 2500, 'aviso');
+    return;
+  }
   if (typeof XLSX === 'undefined') {
     const el = document.getElementById('erros-cdn');
     el.textContent = 'SheetJS não carregado — verifique sua conexão e recarregue a página.';
@@ -2364,6 +2368,10 @@ function abrirComparativo() {
 }
 
 function carregarArquivoComparativo(file) {
+  if (_analisandoAgora) {
+    _toast('Aguarde a análise atual terminar antes de carregar o comparativo.', 2500, 'aviso');
+    return;
+  }
   if (typeof XLSX === 'undefined') return;
   mostrarLoader(true);
   _nomeArquivoComp = file.name;
@@ -3659,6 +3667,14 @@ function exportarCSV() {
 }
 
 function _trocarAba(nomAba) {
+  // Bloqueia troca durante análise em curso. Sem isso, _dadosOriginais e
+  // os caches _ultimo* eram zerados enquanto executarAnalise (com `dados`
+  // capturado em closure) ainda processava — KPIs da aba antiga eram
+  // salvos em _ultimosKpis depois do reset, estado inconsistente.
+  if (_analisandoAgora) {
+    _toast('Aguarde a análise atual terminar antes de trocar de aba.', 2500, 'aviso');
+    return;
+  }
   const aba = _todasAbas[nomAba];
   if (!aba) return;
   _dadosOriginais = aba.dados;
