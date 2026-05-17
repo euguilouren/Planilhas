@@ -287,6 +287,47 @@ function fmtData(d) {
   return d.toLocaleDateString('pt-BR');
 }
 
+// Formata um valor de célula vindo de _dadosOriginais para exibição
+// (preview de coluna, células da tabela, busca). Centraliza o tratamento
+// de Date object — XLSX.read({cellDates:true}) gera Date que ao passar
+// por String(v) vira "Mon Mar 15 2024 GMT-0300..." (US verbose). Cada
+// caller aplica seu próprio escape (esc para HTML, textContent puro).
+function _formatCellValue(v, fallback) {
+  if (v instanceof Date) return fmtData(v);
+  return v == null ? (fallback ?? '') : String(v);
+}
+
+// Converte DD/MM/YYYY, YYYY-MM-DD, Date object ou Excel serial para
+// string ISO YYYY-MM-DD. Usado pelo filtro de data da tabela —
+// comparação string-lexicográfica de ISO funciona como ordenação.
+// Excel serial usa getUTC* para evitar day-1 em fuso negativo (UTC-3).
+function _parseDataBR(s) {
+  if (!s) return null;
+  if (s instanceof Date) {
+    if (isNaN(s)) return null;
+    return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
+  }
+  if (typeof s === 'number') {
+    const d = new Date(Math.round((s - 25569) * 86400 * 1000));
+    if (isNaN(d)) return null;
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+  }
+  const m1 = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+  const m2 = String(s).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m2) return m2[1];
+  return null;
+}
+
+// Escape contra CSV/Formula injection (OWASP). Aplicado em headers
+// E células no exportarCSV — sem isso, planilha de origem com coluna
+// "=HYPERLINK(...)" viraria fórmula executável no Excel ao abrir o
+// CSV exportado.
+function _csvEsc(v) {
+  const s = String(v ?? '');
+  return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+}
+
 // ══════════════════════════════════════════════════════
 // MÓDULO 1: AUDITORIA
 // ══════════════════════════════════════════════════════
@@ -474,13 +515,19 @@ function calcularPareto(dados, colEntidade, colValor, top = 15) {
 // MÓDULO 4: DRE
 // ══════════════════════════════════════════════════════
 
+// Ordem importa: o loop em construirDRE faz `break` no primeiro match.
+// Resultado Financeiro vem ANTES de Despesas Operacionais para que
+// "DESPESA FINANCEIRA"/"DESPESA DE JUROS" não sejam classificadas como
+// despesa operacional — isso distorcia o EBIT (que por norma exclui o
+// resultado financeiro). Pela mesma razão, IR/CSLL vem antes de Despesas
+// Operacionais (caso categoria seja "DESPESA IR" / "DESPESA CSLL").
 const MAPA_DRE = [
   { linha:'(-) Deduções',               termos:/DEDU[CÇ]|IMPOSTO.*VENDA|DEVOLU|ABATIMENTO|PIS|COFINS|ISS|ICMS/ },
   { linha:'Receita Bruta',              termos:/RECEITA|VENDA|FATURAMENTO/ },
   { linha:'(-) CMV/CPV',                termos:/CMV|CPV|CUSTO.*MERCADORIA|CUSTO.*PRODUTO|CUSTO.*VARI/ },
-  { linha:'(-) Despesas Operacionais',  termos:/DESPESA|GASTO|CUSTO[\s_]FIX|FOLHA|PAGAMENTO|SALARIO|ALUGUEL|MARKETING|ENERGIA|TELEFONE|INTERNET|MATERIAL|MANUTENC/ },
   { linha:'(-/+) Resultado Financeiro', termos:/FINANCEI|JUROS|CAMBIAL/ },
-  { linha:'(-) IR\/CSLL',              termos:/\bIR\b|IRPJ|IRRF|IRPF|CSLL|IMPOSTO.*RENDA|CONTRIBUI.*SOCIAL/ },
+  { linha:'(-) IR\/CSLL',               termos:/\bIR\b|IRPJ|IRRF|IRPF|CSLL|IMPOSTO.*RENDA|CONTRIBUI.*SOCIAL/ },
+  { linha:'(-) Despesas Operacionais',  termos:/DESPESA|GASTO|CUSTO[\s_]FIX|FOLHA|PAGAMENTO|SALARIO|ALUGUEL|MARKETING|ENERGIA|TELEFONE|INTERNET|MATERIAL|MANUTENC/ },
 ];
 
 function construirDRE(dados, colCat, colValor) {
@@ -656,11 +703,19 @@ function calcularProjecao(linhas, nProjecoes) {
   const lrDesp = _lr(linhas.map(function(l) { return l.despesa; }));
   const nomesMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const last = linhas[n - 1];
-  let baseAno = 2000, baseMes = 0;
+  let baseAno = new Date().getFullYear(), baseMes = 0;
   if (last && last.periodo) {
+    // Aceita 3 formatos vindos de calcularFluxoPeriodo:
+    //   freq='M' → "MM/YYYY"          ex: "03/2024"
+    //   freq='D' → "DD/MM/YYYY"       ex: "15/03/2024"
+    //   freq='A' → "YYYY"             ex: "2024"
     const p = last.periodo.split('/');
-    if (p.length === 2) { baseMes = parseInt(p[0], 10) - 1; baseAno = parseInt(p[1], 10); }
+    if (p.length === 3)      { baseMes = parseInt(p[1], 10) - 1; baseAno = parseInt(p[2], 10); }
+    else if (p.length === 2) { baseMes = parseInt(p[0], 10) - 1; baseAno = parseInt(p[1], 10); }
+    else if (p.length === 1) { baseAno = parseInt(p[0], 10);     baseMes = 11; /* projeção continua no ano seguinte */ }
   }
+  if (!isFinite(baseAno)) baseAno = new Date().getFullYear();
+  if (!isFinite(baseMes)) baseMes = 0;
   return Array.from({ length: nProjecoes }, function(_, k) {
     const idx = n + k;
     const rec  = Math.max(0, Math.round((lrRec.a  + lrRec.b  * idx) * 100) / 100);
@@ -863,7 +918,10 @@ function calcularAntiFraude(dados, cols) {
       for (let a = 0; a < itens.length; a++) {
         for (let b = a+1; b < itens.length; b++) {
           const {i:ia, v:va, d:da} = itens[a], {i:ib, v:vb, d:db} = itens[b];
-          if (!isFinite(va) || va <= 0) continue;
+          // Valida ambos os lados — sem !isFinite(vb), `Math.abs(va-NaN)=NaN`
+          // e `NaN > 0.01` é false, gerando duplicata fuzzy fantasma quando
+          // uma das linhas tinha valor não-numérico (ex: campo em branco).
+          if (!isFinite(va) || va <= 0 || !isFinite(vb) || vb <= 0) continue;
           if (Math.abs(va-vb)/va > 0.01) continue;
           if (da && db && Math.abs(da-db) > 30*864e5) continue;
           resultado.duplicatas.push({ tipo:'DUPLICATA_FUZZY', severidade:'ALTA',
@@ -1062,6 +1120,37 @@ function calcularKPIsComparativo(kpisA, kpisB) {
 
 // Exportar para uso no app.js
 // (module.exports removido para uso direto no navegador)
+
+// ══════════════════════════════════════════════════════
+// DECODER DE TEXTO COM FALLBACK DE ENCODING
+// ══════════════════════════════════════════════════════
+// Decodes an ArrayBuffer as text with encoding probe.
+// Honra UTF-8 BOM, tenta UTF-8 estrito, e cai para windows-1252
+// (usado por ERPs/bancos BR legacy: Bradesco, Itaú, Santander, SAP velho).
+// Sem isso, CSVs Latin-1 viravam '?' silenciosamente em produção.
+function _decodeTextBuffer(buffer) {
+  if (typeof TextDecoder === 'undefined') return String(buffer || '');
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch (_) {
+    return new TextDecoder('windows-1252').decode(buffer);
+  }
+}
+
+// Probe específico de header OFX/XML antes do fallback genérico.
+function _decodeOFXBuffer(buffer) {
+  if (typeof TextDecoder === 'undefined') return String(buffer || '');
+  const bytes = new Uint8Array(buffer);
+  const peek = new TextDecoder('ascii', { fatal: false }).decode(bytes.slice(0, 1024));
+  if (/encoding\s*=\s*["']?utf-8/i.test(peek) || /^ENCODING\s*:\s*UTF-?8/im.test(peek)) {
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+  return _decodeTextBuffer(buffer);
+}
 
 // ══════════════════════════════════════════════════════
 // OFX — PARSER DE EXTRATO BANCÁRIO (SGML e XML)
@@ -1804,7 +1893,7 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
     <button class="btn-upload btn-template" onclick="baixarTemplate()">
       ↓ Baixar Template Padrão
     </button>
-    <input type="file" id="file-input" accept=".xlsx,.xls,.xlsm,.csv,.tsv,.ofx">
+    <input type="file" id="file-input" accept=".xlsx,.xls,.xlsm,.csv,.tsv,.ofx" aria-label="Selecionar planilha financeira (Excel, CSV, TSV ou OFX) para análise">
   </div>
 
   <!-- Histórico de arquivos recentes -->
@@ -2159,35 +2248,14 @@ function _mostrarErroTipo(nome) {
   _toast(`Formato "${ext}" não suportado. Use Excel (.xlsx / .xls / .xlsm), CSV, TSV ou OFX.`, 5000, 'erro');
 }
 
-// Detects OFX encoding from ArrayBuffer: checks BOM, XML declaration, SGML header.
-// Fallback chain: utf-8-sig → utf-8 → windows-1252 (legacy Brazilian banks).
-function _decodeOFXBuffer(buffer) {
-  const bytes = new Uint8Array(buffer);
-  // UTF-8 BOM
-  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
-    return new TextDecoder('utf-8').decode(buffer);
-  }
-  // Peek at first 1 KB as ASCII to inspect OFX/XML header
-  const peek = new TextDecoder('ascii', { fatal: false }).decode(bytes.slice(0, 1024));
-  // XML OFX 2.x: <?xml ... encoding="UTF-8" ?>
-  if (/encoding\s*=\s*["']?utf-8/i.test(peek)) {
-    return new TextDecoder('utf-8').decode(buffer);
-  }
-  // OFX SGML header: ENCODING:UTF-8
-  if (/^ENCODING\s*:\s*UTF-?8/im.test(peek)) {
-    return new TextDecoder('utf-8').decode(buffer);
-  }
-  // Modern banks without explicit header: try UTF-8 first
-  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-  if (!utf8.includes('�')) return utf8;
-  // Fallback: windows-1252 (Itaú, Bradesco, Santander legacy)
-  return new TextDecoder('windows-1252').decode(buffer);
-}
-
 // ══════════════════════════════════════════════════════
 // CARREGAR ARQUIVO
 // ══════════════════════════════════════════════════════
 function carregarArquivo(file) {
+  if (_analisandoAgora) {
+    _toast('Aguarde a análise atual terminar antes de carregar outro arquivo.', 2500, 'aviso');
+    return;
+  }
   if (typeof XLSX === 'undefined') {
     const el = document.getElementById('erros-cdn');
     el.textContent = 'SheetJS não carregado — verifique sua conexão e recarregue a página.';
@@ -2206,7 +2274,7 @@ function carregarArquivo(file) {
         ({ headers, dados } = parseOFX(text));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX.');
       } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
-        let txt = e.target.result;
+        let txt = _decodeTextBuffer(e.target.result);
         if (txt.charCodeAt(0) === 0xFEFF) txt = txt.slice(1); // remove UTF-8 BOM
         const sep   = file.name.toLowerCase().endsWith('.tsv') ? '\t' : undefined;
         const wb    = XLSX.read(txt, { type:'string', raw:false, FS: sep });
@@ -2316,12 +2384,9 @@ function carregarArquivo(file) {
     }
   };
   reader.onerror = () => { _mostrarErro('Erro ao ler o arquivo. Verifique se ele não está aberto em outro programa.'); };
-  if (file.name.toLowerCase().endsWith('.ofx'))
-    reader.readAsArrayBuffer(file);
-  else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
-    reader.readAsText(file, 'utf-8');
-  else
-    reader.readAsArrayBuffer(file);
+  // Sempre lê como ArrayBuffer: CSV/TSV passam por _decodeTextBuffer
+  // (UTF-8 → fallback windows-1252) para suportar ERPs BR legados.
+  reader.readAsArrayBuffer(file);
 }
 
 // ══════════════════════════════════════════════════════
@@ -2344,6 +2409,10 @@ function abrirComparativo() {
 }
 
 function carregarArquivoComparativo(file) {
+  if (_analisandoAgora) {
+    _toast('Aguarde a análise atual terminar antes de carregar o comparativo.', 2500, 'aviso');
+    return;
+  }
   if (typeof XLSX === 'undefined') return;
   mostrarLoader(true);
   _nomeArquivoComp = file.name;
@@ -2357,7 +2426,7 @@ function carregarArquivoComparativo(file) {
         ({ headers, dados } = parseOFX(text));
         if (!dados.length) throw new Error('Nenhuma transação encontrada no arquivo OFX comparativo.');
       } else if (file.name.toLowerCase().match(/\.(csv|tsv)$/)) {
-        let _csvTxt = e.target.result;
+        let _csvTxt = _decodeTextBuffer(e.target.result);
         if (_csvTxt.charCodeAt(0) === 0xFEFF) _csvTxt = _csvTxt.slice(1);
         const sep = file.name.toLowerCase().endsWith('.tsv') ? '\t' : undefined;
         const wb  = XLSX.read(_csvTxt, { type:'string', raw:false, FS: sep });
@@ -2401,11 +2470,7 @@ function carregarArquivoComparativo(file) {
     }
   };
   reader.onerror = () => { _mostrarErro('Erro ao ler o arquivo comparativo. Verifique se ele não está aberto em outro programa.'); };
-  if (file.name.toLowerCase().endsWith('.ofx'))
-    reader.readAsArrayBuffer(file);
-  else if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.tsv'))
-    reader.readAsText(file, 'utf-8');
-  else reader.readAsArrayBuffer(file);
+  reader.readAsArrayBuffer(file);
 }
 
 // CONFIG COLUNAS
@@ -2461,7 +2526,7 @@ function _atualizarPreview(tipo) {
   if (!sel || !prev) return;
   const col = sel.value;
   if (!col || !_dadosOriginais.length) { prev.textContent = ''; return; }
-  const amostras = _dadosOriginais.slice(0,3).map(r => String(r[col]??'—')).filter(v=>v&&v!=='—');
+  const amostras = _dadosOriginais.slice(0,3).map(r => _formatCellValue(r[col], '—')).filter(v=>v&&v!=='—');
   prev.textContent = amostras.length ? `ex: ${amostras.join(' · ')}` : '';
 }
 
@@ -3170,7 +3235,7 @@ function renderTabela(dados, headers) {
     tbody.innerHTML = `<tr><td colspan="${headers.length}" style="text-align:center;color:var(--text-3);padding:24px;font-style:italic">Nenhum resultado encontrado.</td></tr>`;
   } else {
     tbody.innerHTML = slice.map(row =>
-      '<tr>' + headers.map(h => `<td>${esc(row[h])}</td>`).join('') + '</tr>'
+      '<tr>' + headers.map(h => `<td>${esc(_formatCellValue(row[h]))}</td>`).join('') + '</tr>'
     ).join('');
   }
 
@@ -3247,11 +3312,7 @@ function _filtrarTabelaImediato() {
 
   if (q) {
     filtrado = filtrado.filter(row =>
-      _headers.some(h => {
-        const v = row[h];
-        const s = v instanceof Date ? fmtData(v) : String(v ?? '');
-        return s.toLowerCase().includes(q);
-      })
+      _headers.some(h => _formatCellValue(row[h]).toLowerCase().includes(q))
     );
   }
   if ((de || ate) && colD) {
@@ -3273,24 +3334,7 @@ function _filtrarTabelaImediato() {
   _atualizarContadorBusca(filtrado.length, _dadosOriginais.length);
 }
 
-function _parseDataBR(s) {
-  // Converts DD/MM/YYYY, YYYY-MM-DD, Date object, or Excel serial to YYYY-MM-DD string
-  if (!s) return null;
-  if (s instanceof Date) {
-    if (isNaN(s)) return null;
-    return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,'0')}-${String(s.getDate()).padStart(2,'0')}`;
-  }
-  if (typeof s === 'number') {
-    const d = new Date(Math.round((s - 25569) * 86400 * 1000));
-    if (isNaN(d)) return null;
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  }
-  const m1 = String(s).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
-  const m2 = String(s).match(/^(\d{4}-\d{2}-\d{2})/);
-  if (m2) return m2[1];
-  return null;
-}
+// _parseDataBR vive em analise.js — função pura, testada em vitest.
 
 function _limparFiltros() {
   const de = document.getElementById('filtro-de');
@@ -3620,8 +3664,10 @@ function exportarCSV() {
   const dados = _dadosVisivelArr.length ? _dadosVisivelArr : _dadosOriginais;
   if (!dados.length) { _toast('Sem dados para exportar', 2500, 'aviso'); return; }
   if (typeof XLSX === 'undefined') { _toast('SheetJS não carregado', 2500, 'erro'); return; }
-  const _csvEsc = v => { const s = String(v ?? ''); return /^[=+\-@\t\r]/.test(s) ? "'" + s : s; };
-  const rows = [_headers, ...dados.map(r => _headers.map(h => _csvEsc(r[h])))];
+  // _csvEsc vive em analise.js (escopo módulo) — anti CSV/Formula injection.
+  // Aplicado em HEADERS e células: planilha de origem com coluna "=HYPERLINK(...)"
+  // viraria fórmula executável no CSV exportado se headers passassem crus.
+  const rows = [_headers.map(_csvEsc), ...dados.map(r => _headers.map(h => _csvEsc(r[h])))];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb2 = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb2, ws, 'Dados');
@@ -3632,6 +3678,14 @@ function exportarCSV() {
 }
 
 function _trocarAba(nomAba) {
+  // Bloqueia troca durante análise em curso. Sem isso, _dadosOriginais e
+  // os caches _ultimo* eram zerados enquanto executarAnalise (com `dados`
+  // capturado em closure) ainda processava — KPIs da aba antiga eram
+  // salvos em _ultimosKpis depois do reset, estado inconsistente.
+  if (_analisandoAgora) {
+    _toast('Aguarde a análise atual terminar antes de trocar de aba.', 2500, 'aviso');
+    return;
+  }
   const aba = _todasAbas[nomAba];
   if (!aba) return;
   _dadosOriginais = aba.dados;
@@ -3642,10 +3696,22 @@ function _trocarAba(nomAba) {
   _ultimosKpis = null; _ultimaAuditoria = null; _ultimoAging = null;
   _ultimoDre = null; _ultimoPareto = null; _ultimoAntiFraude = null;
   _scoreAnterior = null;
+  _ultimaAnaliseClaude = '';
+  _auditConfirmados.clear();
+  _paginaAtual = 1; _sortCol = null; _sortDir = 1;
+  // Esconde dashboard com dados/charts da aba antiga até usuário clicar Analisar
+  // de novo — antes ficava visível misturando dados antigos com config nova.
+  if (_chartAging)       { _chartAging.destroy();       _chartAging = null; }
+  if (_chartFluxoM)      { _chartFluxoM.destroy();      _chartFluxoM = null; }
+  if (_chartComparativo) { _chartComparativo.destroy(); _chartComparativo = null; }
+  const dash = document.getElementById('dashboard');
+  if (dash) dash.style.display = 'none';
+  _dashboardVisivel = false;
   const det = detectarColunas(_headers);
   // Re-detectar ERP por aba — abas diferentes podem ter schemas diferentes
   _erpDetectado = detectarERP(_headers);
   mostrarConfigColunas(_headers, det, _erpDetectado);
+  _atualizarStep(2);
 }
 
 // ── Atalhos de teclado ─────────────────────────────────

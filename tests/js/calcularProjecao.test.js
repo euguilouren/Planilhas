@@ -102,4 +102,48 @@ describe('calcularProjecao', () => {
     const result = calcularProjecao(linhas);
     expect(result).toHaveLength(3);
   });
+
+  it('regressão BUG: parser de período aceita formato DD/MM/YYYY (freq=D)', () => {
+    // calcularFluxoPeriodo com freq='D' emite "DD/MM/YYYY"
+    const linhas = Array.from({ length: 5 }, (_, i) => ({
+      periodo: `${String(i + 1).padStart(2, '0')}/03/2024`,
+      receita: 100, despesa: 50, resultado: 50, nfRec: 1, nfDesp: 1, pct: 0,
+    }));
+    const result = calcularProjecao(linhas, 3);
+    // Última data é 05/03/2024 → mês base = março (idx 2)
+    // Projeção começa em Abr → primeiro item: Abr/2024, depois Mai/2024, Jun/2024
+    expect(result[0].periodo).toBe('Abr/2024');
+    expect(result[1].periodo).toBe('Mai/2024');
+    expect(result[2].periodo).toBe('Jun/2024');
+  });
+
+  it('regressão BUG: parser de período aceita formato YYYY (freq=A)', () => {
+    // calcularFluxoPeriodo com freq='A' emite só "YYYY"
+    const linhas = [
+      { periodo: '2022', receita: 100, despesa: 50, resultado: 50, nfRec: 1, nfDesp: 1, pct: 0 },
+      { periodo: '2023', receita: 110, despesa: 50, resultado: 60, nfRec: 1, nfDesp: 1, pct: 0 },
+      { periodo: '2024', receita: 120, despesa: 50, resultado: 70, nfRec: 1, nfDesp: 1, pct: 0 },
+    ];
+    const result = calcularProjecao(linhas, 3);
+    // Para freq=A: baseAno=2024, baseMes=11 (dez) → projeção continua jan/fev/mar do ano seguinte
+    expect(result[0].periodo).toBe('Jan/2025');
+    expect(result[1].periodo).toBe('Fev/2025');
+    expect(result[2].periodo).toBe('Mar/2025');
+  });
+
+  it('regressão BUG: fallback robusto se periodo for inválido', () => {
+    const linhas = [
+      { periodo: 'lixo', receita: 100, despesa: 50, resultado: 50, nfRec: 1, nfDesp: 1, pct: 0 },
+      { periodo: 'mais', receita: 110, despesa: 50, resultado: 60, nfRec: 1, nfDesp: 1, pct: 0 },
+      { periodo: 'lixo', receita: 120, despesa: 50, resultado: 70, nfRec: 1, nfDesp: 1, pct: 0 },
+    ];
+    const result = calcularProjecao(linhas, 3);
+    // baseAno cai para new Date().getFullYear() (não NaN), baseMes=0
+    expect(result).toHaveLength(3);
+    result.forEach(item => {
+      expect(typeof item.periodo).toBe('string');
+      expect(item.periodo).not.toContain('NaN');
+      expect(item.periodo).not.toContain('undefined');
+    });
+  });
 });

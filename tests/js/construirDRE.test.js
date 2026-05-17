@@ -113,4 +113,39 @@ describe('construirDRE', () => {
     expect(Number.isFinite(rb.av)).toBe(true);
     expect(rb.av).toBeCloseTo(100, 1);
   });
+
+  // Regressão: "DESPESA FINANCEIRA" antes caía em (-) Despesas Operacionais
+  // porque /DESPESA/ matchava antes de /FINANCEI/. Isso distorcia EBIT — por
+  // norma o EBIT exclui o resultado financeiro. Fix: Resultado Financeiro
+  // vem antes de Despesas Operacionais no MAPA_DRE.
+  it('regressão BUG: "DESPESA FINANCEIRA" classifica em Resultado Financeiro, não Despesas Operacionais', () => {
+    const dados = [
+      makeRow('RECEITA DE VENDAS', 10000),
+      makeRow('DESPESA FINANCEIRA', -2000),
+      makeRow('DESPESA OPERACIONAL', -1000),
+    ];
+    const result = construirDRE(dados, 'Categoria', 'Valor');
+    const dop = result.linhas.find(l => l.linha === '(-) Despesas Operacionais');
+    const rf  = result.linhas.find(l => l.linha === '(-/+) Resultado Financeiro');
+    // -1000 só (operacional pura). NÃO deve incluir a despesa financeira.
+    expect(dop.valor).toBeCloseTo(-1000, 2);
+    // -2000 (despesa financeira), preservada com sinal.
+    expect(rf.valor).toBeCloseTo(-2000, 2);
+    // EBIT = LB - DOP = (10000 - 0 - 0) - 1000 = 9000 (sem deduzir financeiro)
+    const ebit = result.linhas.find(l => l.linha === '(=) EBIT (Resultado Operacional)');
+    expect(ebit.valor).toBeCloseTo(9000, 2);
+    // Lucro antes IR = EBIT + RF = 9000 + (-2000) = 7000
+    const lair = result.linhas.find(l => l.linha === '(=) Resultado antes IR/CSLL');
+    expect(lair.valor).toBeCloseTo(7000, 2);
+  });
+
+  it('regressão BUG: "JUROS DE EMPRÉSTIMO" classifica em Resultado Financeiro', () => {
+    const dados = [
+      makeRow('RECEITA', 5000),
+      makeRow('JUROS DE EMPRÉSTIMO', -800),
+    ];
+    const result = construirDRE(dados, 'Categoria', 'Valor');
+    const rf = result.linhas.find(l => l.linha === '(-/+) Resultado Financeiro');
+    expect(rf.valor).toBeCloseTo(-800, 2);
+  });
 });

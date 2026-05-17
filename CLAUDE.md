@@ -4,7 +4,7 @@
 
 ## Arquitetura em uma linha
 
-`index.html` é o produto inteiro (~3676 linhas, monolítico). Python é backend opcional não usado no GitHub Pages.
+`index.html` é o produto inteiro (~3779 linhas, monolítico). Python é backend opcional não usado no GitHub Pages.
 Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), Chart.js renderiza aging/fluxo/comparativo, Service Worker (`sw.js`) entrega PWA offline, CSP restringe execução. Briefing IA via Claude API é opcional — chave fica em `sessionStorage`, nunca persistida.
 
 ---
@@ -14,46 +14,53 @@ Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), C
 | Linhas | Bloco | Responsabilidade |
 |--------|-------|-----------------|
 | 3–52 | `<head>` + CDNs + CSP | CSP meta (linha 6), SheetJS 0.20.3, Chart.js 4.4.0, JSON-LD schema.org |
-| 53–1101 | `<script>` analise.js | Módulos **puros de cálculo** — sem DOM, sem `_` globais |
+| 53–1190 | `<script>` analise.js | Módulos **puros de cálculo** + utilitários — sem DOM, sem `_` globais |
 | 64–82 | `PADROES_COLUNAS` + `detectarColunas()` | Regex genéricas (valor, data, vencimento, entidade, chave, categoria, tipo) |
 | 86–130 | `MAPAS_ERP_JS` + `NOMES_ERP` + `detectarERP()` | 20 ERPs com `sinais`/`mapa` — aplicado em `lerColsSelecionadas()` |
-| 132–281 | `calcularIntegridade()` | Verificação cruzada (soma, contagens, KPIs vs. amostra) |
-| 283–387 | `auditoria()` | Duplicatas, campos vazios, outliers, datas futuras |
-| 389–429 | `calcularAging()` | Aging de recebíveis em 5 faixas |
-| 431–469 | `calcularPareto()` | Top N entidades com % acumulado |
-| 462 + 471–534 | `MAPA_DRE` + `construirDRE()` | Monta DRE por regex de categorias |
-| 536–619 | `calcularKPIs()` + `calcularFluxoPeriodo()` | KPIs financeiros + fluxo por período |
-| 621–686 | `calcularProjecao()` + `calcularSazonalidade()` | Tendência linear + padrões mensais/semanais |
-| 688–782 | `renderFluxoPeriodo()` | Render do fluxo (vive em analise.js por histórico) |
-| 784–976 | `calcularAntiFraude()` | 12+ regras: duplicatas, round-numbers, gaps, Benford |
-| 978–1019 | `calcularScoreFinanceiro()` | Score 0–100 ponderado (KPIs + aging + Pareto + auditoria) |
-| 1021–1041 | `calcularKPIsComparativo()` | Delta de KPIs entre 2 datasets |
-| 1043–1101 | `parseOFX()` + `_decodeOFXBuffer()` | Parser nativo de extratos OFX |
-| 1102–1589 | `<style>` | CSS completo — `:root`, layout, responsivo, dark mode (`[data-theme="dark"]` na linha 1122) |
-| 1591–1857 | `<body>` HTML | Header, upload, cards de análise (`#card-*`), painel comparativo, briefing IA, onboarding |
-| 1859–3676 | `<script>` app.js | Estado global, eventos, funções render, integração Claude |
-| 1866–1893 | Estado global | Ver tabela abaixo |
-| 2047–2201 | `carregarArquivo()` | FileReader → SheetJS/OFX → `detectarColunas()` → `detectarERP()` → `mostrarConfigColunas()` |
-| 2203–2268 | `carregarArquivoComparativo()` | Mesmo fluxo p/ segundo dataset |
-| 2270–2351 | `mostrarConfigColunas()` + `lerColsSelecionadas()` | Selects de mapeamento + aplicação do ERP detectado |
-| 2353–2462 | `executarAnalise()` | Orquestra módulos + chama todos os render (async — usa await em IA) |
-| 2464–2510 | `renderKPIs()` | Cards KPI |
-| 2512–2599 | `renderScoreFinanceiro()` | Score 0–100 com componentes |
-| 2601–2651 | `renderVerificacao()` | Painel de integridade |
-| 2653–2704 | `renderAuditoria()` | Tabela de problemas com badges |
-| 2706–2764 | `renderAging()` | Barras + Chart.js (destruir `_chartAging` antes) |
-| 2766–2809 | `renderDRE()` | Tabela DRE com cores por tipo |
-| 2811–2840 | `renderPareto()` | Tabela Pareto com badge Classe A |
-| 2842–2925 | `renderComparativo()` | Tabela + Chart.js (`_chartComparativo`) |
-| 2927–3007 | `renderAntiFraude()` | Alertas de fraude agrupados |
-| 3009–3364 | `renderTabela()` + `filtrarTabela()` + paginação/sort | Tabela de dados brutos |
-| 3366–3625 | Utilitários, briefing IA, exportações | `mostrarLoader`, `exportarJSON`, `exportarCSV`, integração Claude |
-| 3628–3631 | Service Worker | `navigator.serviceWorker.register('sw.js')` |
-| 3677 | Footer + fim de `<body>` | Branding "Powered by Luan Guilherme Lourenço" |
+| 132–203 | `calcularIntegridade()` | Verificação cruzada (soma, contagens, KPIs vs. amostra) |
+| 205–293 | `toNum`, `toDate`, `fmtBRL`, `fmtNum`, `fmtData` | Parsers e formatters puros (PT-BR, US, parênteses contábeis, ISO/BR datas, Excel serial UTC) |
+| 295–333 | `_formatCellValue` + `_parseDataBR` + `_csvEsc` | Helpers compartilhados entre app.js e analise.js. `_csvEsc` previne CSV injection (OWASP); `_parseDataBR` usa `getUTC*` p/ evitar day-1 em UTC-3; `_formatCellValue` centraliza Date→fmtData |
+| 335–443 | `auditoria()` | Duplicatas, campos vazios, outliers, datas futuras (skip DEVOLUÇÃO/ESTORNO) |
+| 445–485 | `calcularAging()` | Aging de recebíveis em 5 faixas |
+| 487–522 | `calcularPareto()` | Top N entidades com % acumulado |
+| 524–600 | `MAPA_DRE` + `construirDRE()` | Monta DRE por regex de categorias. **Resultado Financeiro + IR/CSLL antes de Despesas Operacionais** (loop com break — DESPESA FINANCEIRA precisa match `/FINANCEI/` antes de `/DESPESA/`) |
+| 602–638 | `calcularKPIs()` | KPIs financeiros + período min/max |
+| 640–688 | `calcularFluxoPeriodo()` | Buckets D/M/A — só cria grupo quando valor válido (sem fantasma R$0) |
+| 690–731 | `calcularProjecao()` | Regressão linear; parser aceita `MM/YYYY`, `DD/MM/YYYY`, `YYYY` |
+| 733–763 | `calcularSazonalidade()` | Padrões mensais/semanais |
+| 765–844 | `renderFluxoPeriodo()` | Render do fluxo (vive em analise.js por histórico) |
+| 846–1061 | `calcularAntiFraude()` + constantes Benford/χ² | 12+ regras: duplicatas (exata+fuzzy), round-numbers, fracionamento, Benford, anomalias temporais (fins de semana, feriados BR) |
+| 1063–1104 | `calcularScoreFinanceiro()` | Score 0–100 ponderado (margem + aging + Pareto + auditoria) |
+| 1106–1119 | `calcularKPIsComparativo()` | Delta de KPIs entre 2 datasets |
+| 1121–1156 | `_decodeTextBuffer()` + `_decodeOFXBuffer()` | Probe UTF-8 → fallback windows-1252 (bancos BR legacy: Itaú, Bradesco, Santander) |
+| 1158–1190 | `parseOFX()` | Parser nativo SGML + XML 2.x |
+| 1191–1678 | `<style>` | CSS completo — `:root`, layout, responsivo, dark mode (`[data-theme="dark"]`) |
+| 1680–1946 | `<body>` HTML | Header, upload, cards de análise (`#card-*`), painel comparativo, briefing IA, onboarding |
+| 1948–3779 | `<script>` app.js | Estado global, eventos, funções render, integração Claude |
+| 1985–2014 | Estado global | Ver tabela abaixo |
+| 2143–2282 | `carregarArquivo()` | FileReader → `_decodeTextBuffer` (CSV) ou SheetJS/OFX → `detectarColunas()` → `detectarERP()` → `mostrarConfigColunas()`. **Lock `_analisandoAgora` no início** previne race |
+| 2300–2365 | `carregarArquivoComparativo()` | Mesmo fluxo p/ segundo dataset; também sob lock `_analisandoAgora` |
+| 2367–2436 | `mostrarConfigColunas()` + `_atualizarPreview` + `aplicarMapeamentoERP` + `lerColsSelecionadas` | Selects de mapeamento + aplicação do ERP detectado. `_atualizarPreview` usa `_formatCellValue` (não String) |
+| 2440–2553 | `executarAnalise()` | Orquestra módulos + chama todos os render (async — `await _yield()` solta thread; lock `_analisandoAgora` evita reentrância) |
+| 2561–2605 | `renderKPIs()` | Cards KPI |
+| 2607–2696 | `renderScoreFinanceiro()` | Score 0–100 com componentes |
+| 2698–2736 | `renderVerificacao()` | Painel de integridade |
+| 2738–2792 | `renderAuditoria()` + `_auditoriaPendentes` | Tabela de problemas com badges + confirmação |
+| 2794–2855 | `renderAging()` | Barras + Chart.js (destruir `_chartAging` antes) |
+| 2857–2900 | `renderDRE()` | Tabela DRE com cores por tipo + AV% (NaN→'—' quando RL=0) |
+| 2902–2929 | `renderPareto()` | Tabela Pareto com badge Classe A |
+| 2931–3013 | `renderComparativo()` | Tabela + Chart.js (`_chartComparativo`) |
+| 3015–3095 | `renderAntiFraude()` | Alertas de fraude agrupados |
+| 3097–3245 | `renderTabela()` + `filtrarTabela()` + paginação/sort | Tabela de dados brutos. `renderTabela` usa `_formatCellValue` em células; `filtrarTabela` idem na busca |
+| 3247–3528 | Briefing IA + onboarding + histórico | `_gerarBriefing`, `_markdownParaHTML`, `analisarComClaude`, `_mostrarOnboarding`, `_salvarHistorico` |
+| 3529–3567 | `exportarJSON()` + `exportarCSV()` | Exports. `exportarCSV` usa `_csvEsc` em **headers e células** |
+| 3569–3645 | `_trocarAba()` | Multi-sheet XLSX. Lock `_analisandoAgora`, destroi charts, esconde dashboard, reset paginação |
+| 3678–3681 | Service Worker | `navigator.serviceWorker.register('sw.js')` |
+| 3779 | Footer + fim de `<body>` | Branding "Powered by Luan Guilherme Lourenço" |
 
 ---
 
-## Variáveis de Estado Global (app.js, ~linha 1866)
+## Variáveis de Estado Global (app.js, ~linha 1985)
 
 ```js
 // Dataset principal
@@ -123,7 +130,7 @@ arquivo (XLSX/CSV/OFX) → carregarArquivo()
 
 ---
 
-## Variáveis CSS (`:root`, linha 1103)
+## Variáveis CSS (`:root`, linha 1192)
 
 ```css
 /* Paleta canônica */
@@ -141,20 +148,22 @@ arquivo (XLSX/CSV/OFX) → carregarArquivo()
 --surface: #fff;  --success: #006100;  --danger: #9C0006;
 ```
 
-Dark mode: override completo em `[data-theme="dark"]` (linha 1122+). Toggle persiste em `localStorage`.
+Dark mode: override completo em `[data-theme="dark"]` (linha ~1211). Toggle persiste em `localStorage`.
 Breakpoints: `900px` (KPIs 3 cols), `600px` (mobile — KPIs 2 cols, toolbar empilhada).
 
 ---
 
 ## Convenções de Código
 
-- Funções em `analise.js` (linhas 53–1101): recebem dados como parâmetros, **nunca tocam o DOM** e **nunca leem `_` globais**
+- Funções em `analise.js` (linhas 53–1190): recebem dados como parâmetros, **nunca tocam o DOM** e **nunca leem `_` globais**. Inclui também helpers compartilhados (`_formatCellValue`, `_parseDataBR`, `_csvEsc`) — puros, testáveis em vitest, acessíveis ao app.js via escopo de janela
 - Funções `render*()` em `app.js`: **nunca calculam** — só renderizam innerHTML usando `esc()` para sanitizar (XSS)
+- Para exibir valor de célula em DOM/preview, use `_formatCellValue(v)` em vez de `String(v)` — trata Date object (XLSX cellDates) → DD/MM/YYYY em vez de "Mon Mar 15 2024 GMT-0300..."
 - IDs HTML: `kebab-case` (ex: `card-aging`, `tbody-dados`)
 - IDs de selects: `sel-{tipo}` (ex: `sel-valor`, `sel-data`, `sel-erp-sistema`)
 - Prefixo `_` para variáveis de estado global
 - Nenhum `console.log` em produção — o obfuscador inclui tudo
 - Toda chamada Chart.js deve destruir a instância anterior (`_chart*.destroy()`)
+- Operações async em `executarAnalise`, `carregarArquivo*`, `_trocarAba` checam o lock `_analisandoAgora` — não criar novos handlers de UI que mutem `_dadosOriginais`/`_cols` sem o guarda
 
 ---
 
@@ -206,7 +215,11 @@ Adicionar em `ASSINATURAS_ERP`: `'NOME_ERP': ['ColunaTipica1', 'ColunaTipica2', 
 | `MAPA_DRE` (array de `{linha, termos}`) | Qualquer mudança altera o DRE para todos os usuários |
 | `_chart*.destroy()` antes de `new Chart()` | Sem isso, múltiplos canvas vazam memória |
 | `mostrarLoader(true/false)` nos pontos existentes | Remove feedback visual de carregamento |
-| Registro do Service Worker (linha 3628) | Remoção quebra o modo PWA offline |
+| Registro do Service Worker (linha 3678) | Remoção quebra o modo PWA offline |
+| Ordem do `MAPA_DRE` (Resultado Financeiro e IR/CSLL antes de Despesas Operacionais) | Loop com `break` no primeiro match — reordenar fará `DESPESA FINANCEIRA` cair em DespOp e distorcer EBIT |
+| `_csvEsc` aplicado em **headers** e células do `exportarCSV` | Remover do header reintroduz CSV/Formula injection — planilha com coluna `=HYPERLINK(...)` vira fórmula no Excel |
+| `_parseDataBR` usa `getUTC*` para Excel serial | Trocar por `getFullYear()` reintroduz day-1 bug em UTC-3 |
+| `_analisandoAgora` checado em `_trocarAba`, `carregarArquivo`, `carregarArquivoComparativo` | Sem o guard, troca durante análise corrompe `_ultimosKpis` etc |
 | Chave Claude API em `sessionStorage` | Persistir em `localStorage` viola a promessa de privacidade |
 
 ---
@@ -215,12 +228,13 @@ Adicionar em `ASSINATURAS_ERP`: `'NOME_ERP': ['ColunaTipica1', 'ColunaTipica2', 
 
 | O que adicionar | Onde |
 |----------------|------|
-| Novo card de análise | Dentro do `<main>`, perto dos `#card-*` (linhas 1738–1829), antes de `<div class="card" id="card-dados">` |
-| Nova função de cálculo | Final do bloco `analise.js` (antes da linha 1101), sem DOM, retornando estrutura serializável |
+| Novo card de análise | Dentro do `<main>`, perto dos `#card-*` (linhas ~1820–1910), antes de `<div class="card" id="card-dados">` |
+| Nova função de cálculo | Final do bloco `analise.js` (antes da linha 1190), sem DOM, retornando estrutura serializável |
+| Novo helper puro (parser/format) | Junto de `_formatCellValue` / `_parseDataBR` / `_csvEsc` (~linha 295–333) — exportar via `extract-analise.js` para teste vitest |
 | Novo tipo de gráfico | Copiar padrão de `renderAging()` — destruir instância anterior, criar variável `_chartXxx` |
 | Novo campo de mapeamento | Adicionar chave em `_cols`, label em `mostrarConfigColunas()`, uso em `executarAnalise()`, regex em `PADROES_COLUNAS` |
 | Novo KPI | Retornar do `calcularKPIs()` e renderizar em `renderKPIs()`; opcionalmente pesar em `calcularScoreFinanceiro()` |
-| Nova regra anti-fraude | Adicionar em `calcularAntiFraude()` (linha 784); seguir formato `{ tipo, severidade, descricao, items[] }` |
+| Nova regra anti-fraude | Adicionar em `calcularAntiFraude()` (~linha 866); seguir formato `{ tipo, severidade, descricao, items[] }` |
 | Novo cache para briefing IA | Adicionar `_ultimoXxx` em `app.js` e incluir no prompt construído antes da chamada Claude |
 
 ---
@@ -262,7 +276,7 @@ push → main
 
 | Workflow | O que faz |
 |----------|-----------|
-| `ci.yml` | Matriz pytest Python 3.10/3.11/3.12 + vitest JS, validação de HTML (DOCTYPE, branding) e do `config.yaml`, `pip-audit` |
+| `ci.yml` | pytest Python 3.12 + vitest JS, validação de HTML (DOCTYPE, branding) e do `config.yaml`, `pip-audit`, `bandit`, SRI dos CDNs |
 | `deploy.yml` | Gate de testes → obfusca → publica em `gh-pages` |
 | `lighthouse.yml` | Auditoria Lighthouse em push/PR |
 | `auto-review.yml` | Code review semanal (segunda 08:00 UTC) via Claude, abre PR opcional |
@@ -271,8 +285,16 @@ push → main
 
 ## Suítes de Teste
 
-- **Python (pytest)** — testes unitários em `tests/`
-- **JavaScript (vitest)** — 98 testes em `tests/js/` cobrindo as funções puras de `analise.js`: `detectarColunas`, `auditoria`, `calcularAging`, `calcularPareto`, `construirDRE`, `calcularKPIs`, `calcularProjecao`, `calcularSazonalidade`
+- **Python (pytest)** — 337 testes em `tests/`
+- **JavaScript (vitest)** — 270 testes em `tests/js/` cobrindo todas as funções puras de `analise.js`:
+  - Parsers: `toNum`, `toDate`, `_parseDataBR`
+  - Helpers de UI: `_formatCellValue`, `_csvEsc`
+  - Decoders: `_decodeTextBuffer`, `_decodeOFXBuffer`
+  - Detecção: `detectarColunas`, `detectarERP`
+  - Cálculo: `auditoria`, `calcularAging`, `calcularPareto`, `construirDRE`, `calcularKPIs`, `calcularFluxoPeriodo`, `calcularProjecao`, `calcularSazonalidade`, `calcularAntiFraude`, `calcularScoreFinanceiro`, `calcularKPIsComparativo`, `calcularIntegridade`
+  - Parser: `parseOFX`
+
+Para expor nova função pura ao vitest, exportar em `tests/js/helpers/extract-analise.js` (destructure no final do arquivo).
 
 Rodar localmente:
 ```bash
