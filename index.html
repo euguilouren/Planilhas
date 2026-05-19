@@ -1791,6 +1791,129 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,te
 /* ── Badge verificado pulse ── */
 @keyframes pulse-verde{0%,100%{box-shadow:0 0 0 0 rgba(5,150,105,.35)}50%{box-shadow:0 0 0 8px rgba(5,150,105,0)}}
 .badge-verificado{animation:pulse-verde 2s ease-in-out 3}
+
+/* ════════════════════════════════════════════════════════════════
+   ANIMAÇÕES "LIVELY" — profissional + interativo + divertido
+   ════════════════════════════════════════════════════════════════ */
+
+/* KPI icons — bounce in com overshoot + wobble no hover */
+@keyframes iconBounceIn{
+  0%{transform:scale(0) rotate(-12deg);opacity:0}
+  60%{transform:scale(1.18) rotate(4deg);opacity:1}
+  100%{transform:scale(1) rotate(0);opacity:.18}
+}
+@keyframes iconWobble{
+  0%,100%{transform:rotate(0) scale(1)}
+  25%{transform:rotate(-6deg) scale(1.08)}
+  75%{transform:rotate(6deg) scale(1.08)}
+}
+.kpi-icon{animation:iconBounceIn .6s cubic-bezier(.34,1.56,.64,1) both;
+  transform-origin:center;transition:opacity .25s ease}
+.kpi:nth-child(1) .kpi-icon{animation-delay:.05s}
+.kpi:nth-child(2) .kpi-icon{animation-delay:.13s}
+.kpi:nth-child(3) .kpi-icon{animation-delay:.21s}
+.kpi:nth-child(4) .kpi-icon{animation-delay:.29s}
+.kpi:nth-child(5) .kpi-icon{animation-delay:.37s}
+.kpi:nth-child(6) .kpi-icon{animation-delay:.45s}
+.kpi:hover .kpi-icon{animation:iconWobble .55s cubic-bezier(.34,1.56,.64,1) 1;opacity:.42}
+
+/* Aging bars — fill animation com cascata */
+@keyframes barFill{from{width:0;opacity:.4}to{opacity:1}}
+.bar{animation:barFill .9s cubic-bezier(.34,.1,.68,1) both}
+#aging-content tr:nth-child(1) .bar{animation-delay:.05s}
+#aging-content tr:nth-child(2) .bar{animation-delay:.18s}
+#aging-content tr:nth-child(3) .bar{animation-delay:.31s}
+#aging-content tr:nth-child(4) .bar{animation-delay:.44s}
+#aging-content tr:nth-child(5) .bar{animation-delay:.57s}
+#aging-content tr:nth-child(6) .bar{animation-delay:.70s}
+
+/* Pareto rows — slide-in cascata da esquerda */
+@keyframes paretoSlideIn{
+  from{transform:translateX(-20px);opacity:0}
+  to{transform:translateX(0);opacity:1}
+}
+#pareto-content tbody tr{animation:paretoSlideIn .45s cubic-bezier(.34,1.2,.64,1) both}
+#pareto-content tbody tr:nth-child(1){animation-delay:.02s}
+#pareto-content tbody tr:nth-child(2){animation-delay:.06s}
+#pareto-content tbody tr:nth-child(3){animation-delay:.10s}
+#pareto-content tbody tr:nth-child(4){animation-delay:.14s}
+#pareto-content tbody tr:nth-child(5){animation-delay:.18s}
+#pareto-content tbody tr:nth-child(6){animation-delay:.22s}
+#pareto-content tbody tr:nth-child(7){animation-delay:.26s}
+#pareto-content tbody tr:nth-child(8){animation-delay:.30s}
+#pareto-content tbody tr:nth-child(9){animation-delay:.34s}
+#pareto-content tbody tr:nth-child(10){animation-delay:.38s}
+#pareto-content tbody tr:nth-child(n+11){animation-delay:.42s}
+
+/* Logo header — bounce subtle on hover (não rotate completo) */
+.header-logo{cursor:pointer;
+  transition:transform var(--t-base),box-shadow var(--t-base),filter var(--t-fast)}
+.header-logo:hover{transform:scale(1.08) rotate(-4deg);
+  box-shadow:0 6px 16px rgba(0,0,0,.35);filter:brightness(1.1)}
+.header-logo:active{transform:scale(.95) rotate(2deg)}
+
+/* Empty state — ícone subtle pulse */
+@keyframes emptyPulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+.empty-warning::before,.empty::before{display:inline-block;animation:emptyPulse 3s ease-in-out infinite}
+
+/* Toast — bounce entry overshoot */
+@keyframes toastBounce{
+  0%{transform:translateX(-50%) translateY(80px);opacity:0}
+  60%{transform:translateX(-50%) translateY(-10px);opacity:1}
+  100%{transform:translateX(-50%) translateY(0);opacity:1}
+}
+#toast.show{animation:toastBounce .42s cubic-bezier(.34,1.56,.64,1) forwards}
+
+/* Score number — shake quando crítico (<60) */
+@keyframes scoreShake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-4px)}
+  40%{transform:translateX(4px)}
+  60%{transform:translateX(-3px)}
+  80%{transform:translateX(3px)}
+}
+.score-numero.shake{animation:scoreShake .42s cubic-bezier(.36,.07,.19,.97) 1}
+
+/* Confete (score ≥80) — partículas SVG caindo */
+@keyframes confetiFall{
+  0%{transform:translateY(0) rotate(0);opacity:1}
+  100%{transform:translateY(120px) rotate(540deg);opacity:0}
+}
+.confete-particula{position:absolute;width:8px;height:8px;border-radius:2px;
+  pointer-events:none;animation:confetiFall 1.4s cubic-bezier(.4,.6,.5,1) forwards}
+
+/* Sort indicator — rotação suave (até 180°) */
+.sort-arrow{display:inline-block;transition:transform var(--t-base);
+  font-size:10px;opacity:.55}
+.sort-arrow.desc{transform:rotate(180deg)}
+
+/* Cell de R$ clickável — copy-to-clipboard */
+.copyable{cursor:pointer;position:relative;transition:color var(--t-fast)}
+.copyable:hover{color:var(--brand)}
+.copyable:active{transform:scale(.97)}
+.copyable.copied::after{
+  content:'✓ Copiado';position:absolute;right:0;top:-22px;
+  background:var(--verde);color:#fff;font-size:10px;font-weight:700;
+  padding:2px 7px;border-radius:4px;animation:fadeUp .35s ease-out both;
+  pointer-events:none;z-index:5
+}
+
+/* Highlight de termo de busca */
+mark.search-hit{
+  background:var(--gold-bg);color:inherit;padding:0 3px;border-radius:3px;
+  font-weight:600;box-shadow:inset 0 -2px 0 var(--gold)
+}
+
+/* prefers-reduced-motion — desativa TODAS as animações novas */
+@media(prefers-reduced-motion:reduce){
+  .kpi-icon,.bar,#pareto-content tbody tr,#toast.show,
+  .score-numero.shake,.confete-particula,.empty-warning::before,.empty::before{
+    animation:none!important;
+    transform:none!important;opacity:1!important
+  }
+  .header-logo:hover{transform:none!important;filter:none!important}
+  .copyable:active{transform:none!important}
+}
 /* ── Search icon ── */
 .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-2);pointer-events:none;display:flex}
 /* ── Score Financeiro ── */
@@ -2178,6 +2301,67 @@ function _toast(msg, ms=3000, tipo='') {
   el.className = 'show' + (tipo ? ` toast-${tipo}` : '');
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// Spawna 14 partículas de confete em torno de um elemento (score ≥80).
+// Respeita prefers-reduced-motion via CSS @keyframes override.
+function _dispararConfete(el, corBase) {
+  if (!el) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const cores = [corBase, 'var(--gold)', 'var(--brand)', 'var(--verde)', '#F472B6', '#A78BFA'];
+  const parent = el.parentElement;
+  if (!parent) return;
+  const oldPos = getComputedStyle(parent).position;
+  if (oldPos === 'static') parent.style.position = 'relative';
+  const elRect = el.getBoundingClientRect();
+  const parentRect = parent.getBoundingClientRect();
+  const cx = elRect.left - parentRect.left + elRect.width / 2;
+  const cy = elRect.top  - parentRect.top  + elRect.height / 2;
+  for (let i = 0; i < 14; i++) {
+    const p = document.createElement('span');
+    p.className = 'confete-particula';
+    const angle = (i / 14) * Math.PI * 2 + Math.random() * .6;
+    const dist = 40 + Math.random() * 50;
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist - 20;
+    p.style.left = `${cx + dx}px`;
+    p.style.top  = `${cy + dy}px`;
+    p.style.background = cores[i % cores.length];
+    p.style.animationDelay = `${i * 20}ms`;
+    parent.appendChild(p);
+    setTimeout(() => p.remove(), 1700);
+  }
+}
+
+// Copy-to-clipboard com feedback visual ✓ no próprio elemento
+async function _copiarValor(el, valorRaw) {
+  if (!el) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(String(valorRaw));
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = String(valorRaw); ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+      ta.remove();
+    }
+    el.classList.add('copied');
+    setTimeout(() => el.classList.remove('copied'), 1200);
+  } catch (_) {
+    _toast('Falha ao copiar para a área de transferência', 2500, 'erro');
+  }
+}
+
+// Aplica <mark.search-hit> em torno do termo de busca dentro de um elemento.
+// Usado por filtrarTabela para sinalizar match visualmente.
+function _highlightTermo(html, termo) {
+  if (!termo || termo.length < 2) return html;
+  const safeTermo = termo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try {
+    return html.replace(new RegExp(`(${safeTermo})`, 'gi'), '<mark class="search-hit">$1</mark>');
+  } catch (_) {
+    return html;
+  }
 }
 
 function _setLoaderStep(text) {
@@ -2713,11 +2897,19 @@ function renderKPIs(k) {
       <div class="lbl">Colunas Detectadas</div>
       <div class="val ok">${k.colsDetectadas}</div>
       <div class="sub">mapeadas</div></div>`;
-  // Counter animations
+  // Counter animations + copy-to-clipboard nos valores monetários
   [{id:'kpi-receita',val:k.receita,tipo:'brl'},{id:'kpi-despesa',val:k.despesa,tipo:'brl'},
    {id:'kpi-resultado',val:k.resultado,tipo:'brl'},{id:'kpi-ticket',val:k.ticket,tipo:'brl'},
    {id:'kpi-registros',val:k.totalRegistros,tipo:'num'}
-  ].forEach(({id,val,tipo}) => { const el=document.getElementById(id); if(el) _animarContador(el,val,tipo); });
+  ].forEach(({id,val,tipo}) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    _animarContador(el, val, tipo);
+    // Lively: click no KPI copia valor raw (sem formatação) com feedback ✓
+    el.classList.add('copyable');
+    el.title = 'Clique para copiar valor';
+    el.onclick = () => _copiarValor(el, val);
+  });
 }
 
 // ══════════════════════════════════════════════════════
@@ -2742,6 +2934,17 @@ function renderScoreFinanceiro(s) {
   barra.style.width = '0%';
   requestAnimationFrame(() => { barra.style.width = s.score + '%'; });
   _animarContador(numEl, s.score, 'num', 600);
+
+  // Lively: confete para score alto (≥80) / shake para crítico (<60)
+  // Respeita prefers-reduced-motion via CSS keyframe override.
+  setTimeout(() => {
+    if (s.score >= 80) _dispararConfete(numEl, cor);
+    else if (s.score < 60) {
+      numEl.classList.remove('shake');
+      void numEl.offsetWidth; // restart animation
+      numEl.classList.add('shake');
+    }
+  }, 650); // após o count-up terminar
 
   // Delta vs análise anterior
   const deltaEl = document.getElementById('score-delta');
@@ -3235,15 +3438,20 @@ function renderTabela(dados, headers) {
   const tbody  = document.getElementById('tbody-dados');
   thead.innerHTML = '<tr>' + headers.map(h => {
     const sorted = _sortCol === h;
-    const arrow  = sorted ? (_sortDir === 1 ? ' ▲' : ' ▼') : '';
-    return `<th style="cursor:pointer;user-select:none;white-space:nowrap" data-col="${esc(h)}" onclick="_ordenarTabela(this.dataset.col)" title="Clique para ordenar">${esc(h)}<span style="opacity:.5;font-size:10px">${arrow}</span></th>`;
+    // Lively: sort arrow agora roda 180° suavemente via CSS .sort-arrow.desc
+    const arrowCls = sorted ? (_sortDir === 1 ? 'sort-arrow' : 'sort-arrow desc') : '';
+    const arrowChar = sorted ? '▲' : '';
+    return `<th style="cursor:pointer;user-select:none;white-space:nowrap" data-col="${esc(h)}" onclick="_ordenarTabela(this.dataset.col)" title="Clique para ordenar">${esc(h)}${sorted ? ` <span class="${arrowCls}">${arrowChar}</span>` : ''}</th>`;
   }).join('') + '</tr>';
 
   if (!slice.length) {
     tbody.innerHTML = `<tr><td colspan="${headers.length}" style="text-align:center;color:var(--text-3);padding:24px;font-style:italic">Nenhum resultado encontrado.</td></tr>`;
   } else {
+    // Lively: aplica <mark.search-hit> em torno do termo de busca atual
+    // para sinalizar visualmente onde o filtro encontrou correspondência.
+    const _cellHTML = v => _highlightTermo(esc(_formatCellValue(v)), _termoBuscaAtual);
     tbody.innerHTML = slice.map(row =>
-      '<tr>' + headers.map(h => `<td>${esc(_formatCellValue(row[h]))}</td>`).join('') + '</tr>'
+      '<tr>' + headers.map(h => `<td>${_cellHTML(row[h])}</td>`).join('') + '</tr>'
     ).join('');
   }
 
@@ -3298,6 +3506,7 @@ function _ordenarTabela(col) {
 }
 
 let _buscaTimer = null;
+let _termoBuscaAtual = '';
 function filtrarTabela() {
   const q = document.getElementById('busca').value;
   const clearBtn = document.getElementById('busca-clear');
@@ -3308,6 +3517,7 @@ function filtrarTabela() {
 }
 function _filtrarTabelaImediato() {
   const q    = document.getElementById('busca').value.toLowerCase();
+  _termoBuscaAtual = q;  // expõe pro renderTabela aplicar highlight
   const de   = document.getElementById('filtro-de')?.value;
   const ate  = document.getElementById('filtro-ate')?.value;
   // Resolve coluna de data: se _cols.data não mapeada, tenta header 'Data'
@@ -3842,6 +4052,17 @@ function _renderHistorico() {
 
 // Renderizar histórico ao carregar a página
 window.addEventListener('DOMContentLoaded', _renderHistorico);
+
+// Lively: easing global do Chart.js — animações mais suaves e elegantes
+// em todos os charts (aging, fluxo, comparativo). Respeita reduced-motion.
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof Chart === 'undefined') return;
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  Chart.defaults.animation.duration = reduced ? 0 : 800;
+  Chart.defaults.animation.easing   = 'easeOutQuart';
+  Chart.defaults.animations.colors    = { duration: reduced ? 0 : 400 };
+  Chart.defaults.animations.numbers   = { duration: reduced ? 0 : 800, easing: 'easeOutQuart' };
+});
 
 // ══════════════════════════════════════════════════════
 // PWA — Service Worker
