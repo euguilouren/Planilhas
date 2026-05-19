@@ -1482,6 +1482,34 @@ body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:#E8EDF4;
   display:grid;grid-template-columns:200px 1fr;gap:24px;
   align-items:start
 }
+/* Quando aba tem sub-tabs ativas, sidebar TOC fica oculta */
+.dashboard-layout.no-sidebar{grid-template-columns:1fr}
+.dashboard-layout.no-sidebar .dashboard-sidebar{display:none}
+
+/* Sub-tabs (barra secundária dentro de cada aba) */
+.sub-tab-bar{
+  display:flex;gap:4px;margin:0 0 16px;flex-wrap:wrap;
+  padding-bottom:10px;border-bottom:1px solid var(--border)
+}
+.sub-tab-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 14px;font-size:12.5px;font-weight:600;
+  color:var(--text-2);background:transparent;
+  border:1.5px solid var(--border);border-radius:18px;
+  cursor:pointer;font-family:inherit;letter-spacing:.1px;
+  transition:all var(--t-fast);min-height:34px
+}
+.sub-tab-btn:hover{background:var(--surface-2);color:var(--text);border-color:var(--border-strong)}
+.sub-tab-btn:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+.sub-tab-btn.active{
+  background:var(--brand-bg);color:var(--brand-2);border-color:var(--brand);
+  font-weight:700
+}
+.sub-tab-btn .sub-tab-emoji{font-size:13px;line-height:1}
+
+/* Sub-section dentro de uma tab principal — JS controla via .active */
+.sub-section{display:none;animation:tabFade .3s cubic-bezier(.16,1,.3,1) both}
+.sub-section.active{display:block}
 .dashboard-sidebar{
   position:sticky;top:62px;
   align-self:start;
@@ -1521,25 +1549,52 @@ body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:#E8EDF4;
 .tab-section{display:none;animation:fadeUp .35s cubic-bezier(.16,1,.3,1) both}
 .tab-section.active{display:block}
 
-/* Cards colapsáveis */
+/* Cards colapsáveis + foco fullscreen */
 .card{position:relative}
-.card-collapse-btn{
-  position:absolute;top:14px;right:14px;
+.card-actions{
+  position:absolute;top:10px;right:10px;display:flex;gap:2px;z-index:2
+}
+.card-collapse-btn,.card-focus-btn{
   background:transparent;border:none;cursor:pointer;
-  padding:4px;border-radius:var(--radius-sm);
+  padding:5px;border-radius:var(--radius-sm);
   color:var(--text-3);display:inline-flex;align-items:center;justify-content:center;
-  transition:background var(--t-fast),color var(--t-fast),transform var(--t-base);
-  z-index:2
+  transition:background var(--t-fast),color var(--t-fast),transform var(--t-base)
 }
-.card-collapse-btn:hover{background:var(--surface-2);color:var(--text)}
-.card-collapse-btn:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
-.card-collapse-btn svg{width:14px;height:14px;transition:transform var(--t-base)}
+.card-collapse-btn:hover,.card-focus-btn:hover{background:var(--surface-2);color:var(--text)}
+.card-collapse-btn:focus-visible,.card-focus-btn:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+.card-collapse-btn svg,.card-focus-btn svg{width:14px;height:14px;transition:transform var(--t-base)}
 .card.collapsed .card-collapse-btn svg{transform:rotate(-90deg)}
-.card.collapsed > *:not(h2):not(.card-collapse-btn){
-  display:none!important
-}
+.card.collapsed > *:not(h2):not(.card-actions){display:none!important}
 .card.collapsed{padding-bottom:18px}
 .card.collapsed h2{margin-bottom:0;padding-bottom:0;border-bottom:none}
+
+/* Modo foco — body.focus-mode mostra apenas o card.focus-target */
+body.focus-mode #upload-area,
+body.focus-mode .header,
+body.focus-mode .toolbar,
+body.focus-mode .tab-bar,
+body.focus-mode .dashboard-sidebar,
+body.focus-mode .sub-tab-bar,
+body.focus-mode #toast,
+body.focus-mode #loader{display:none!important}
+body.focus-mode #dashboard{max-width:100%;padding:24px;animation:none}
+body.focus-mode .dashboard-layout{grid-template-columns:1fr;gap:0}
+body.focus-mode .tab-section.active .card:not(.focus-target),
+body.focus-mode .tab-section:not(.active),
+body.focus-mode .sub-section:not(.active){display:none!important}
+body.focus-mode .card.focus-target{
+  max-width:1400px;margin:0 auto;
+  animation:fadeUp .35s cubic-bezier(.16,1,.3,1) both
+}
+/* Botão "voltar" flutuante no canto */
+body.focus-mode::after{
+  content:'Esc para sair do modo foco';
+  position:fixed;top:14px;right:18px;
+  background:var(--surface);color:var(--text-2);
+  padding:8px 14px;font-size:11.5px;font-weight:600;
+  border-radius:18px;border:1px solid var(--border);
+  box-shadow:var(--shadow-md);z-index:10000;pointer-events:none
+}
 
 /* Animação de entrada das seções (similar ao fadeUp existente) — refinada */
 @keyframes tabFade{
@@ -2313,22 +2368,38 @@ mark.search-hit{
   <!-- ─── ABA: ANÁLISE ─── -->
   <section class="tab-section" data-tab="analise" role="tabpanel" aria-labelledby="tab-analise" style="display:none">
 
+  <nav class="sub-tab-bar" role="tablist" aria-label="Sub-seções de Análise">
+    <button class="sub-tab-btn active" role="tab" data-sub-tab="tudo"   aria-selected="true"  onclick="_trocarSubAba('analise','tudo')">  <span class="sub-tab-emoji" aria-hidden="true">▦</span>Tudo</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="fluxo"  aria-selected="false" onclick="_trocarSubAba('analise','fluxo')"> <span class="sub-tab-emoji" aria-hidden="true">📊</span>Fluxo</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="aging"  aria-selected="false" onclick="_trocarSubAba('analise','aging')"> <span class="sub-tab-emoji" aria-hidden="true">⏱</span>Aging</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="dre"    aria-selected="false" onclick="_trocarSubAba('analise','dre')">   <span class="sub-tab-emoji" aria-hidden="true">📋</span>DRE</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="pareto" aria-selected="false" onclick="_trocarSubAba('analise','pareto')"><span class="sub-tab-emoji" aria-hidden="true">🔝</span>Pareto</button>
+  </nav>
+
   <!-- Fluxo por Período -->
+  <div class="sub-section active" data-sub-tab="fluxo">
   <div class="card" id="card-fluxo" role="region" aria-label="Fluxo por Período" style="display:none">
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Fluxo por Período</h2>
     <div id="fluxo-content"></div>
   </div>
+  </div>
 
   <!-- Grid: Aging + gráfico -->
+  <div class="sub-section active" data-sub-tab="aging">
   <div class="grid2">
     <div class="card" id="card-aging" role="region" aria-label="Aging de Recebíveis"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Aging de Recebíveis</h2><div id="aging-content"><div class="empty">Coluna de vencimento não detectada</div></div></div>
     <div class="card"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>Aging — Distribuição</h2><div class="chart-box"><canvas id="chart-aging"></canvas></div></div>
   </div>
+  </div>
 
-  <!-- Grid: DRE + Pareto -->
-  <div class="grid2">
-    <div class="card" id="card-dre" role="region" aria-label="DRE"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>DRE</h2><div id="dre-content"><div class="empty">Categorias não detectadas</div></div></div>
-    <div class="card" id="card-pareto" role="region" aria-label="Análise Pareto"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Pareto — Top Entidades</h2><div id="pareto-content"></div></div>
+  <!-- DRE -->
+  <div class="sub-section active" data-sub-tab="dre">
+  <div class="card" id="card-dre" role="region" aria-label="DRE"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>DRE</h2><div id="dre-content"><div class="empty">Categorias não detectadas</div></div></div>
+  </div>
+
+  <!-- Pareto -->
+  <div class="sub-section active" data-sub-tab="pareto">
+  <div class="card" id="card-pareto" role="region" aria-label="Análise Pareto"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Pareto — Top Entidades</h2><div id="pareto-content"></div></div>
   </div>
 
   </section><!-- /analise -->
@@ -2336,16 +2407,26 @@ mark.search-hit{
   <!-- ─── ABA: SEGURANÇA ─── -->
   <section class="tab-section" data-tab="seguranca" role="tabpanel" aria-labelledby="tab-seguranca" style="display:none">
 
+  <nav class="sub-tab-bar" role="tablist" aria-label="Sub-seções de Segurança">
+    <button class="sub-tab-btn active" role="tab" data-sub-tab="tudo"       aria-selected="true"  onclick="_trocarSubAba('seguranca','tudo')">     <span class="sub-tab-emoji" aria-hidden="true">▦</span>Tudo</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="auditoria"  aria-selected="false" onclick="_trocarSubAba('seguranca','auditoria')"><span class="sub-tab-emoji" aria-hidden="true">🔍</span>Auditoria</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="antifraude" aria-selected="false" onclick="_trocarSubAba('seguranca','antifraude')"><span class="sub-tab-emoji" aria-hidden="true">🛡</span>Anti-Fraude</button>
+  </nav>
+
   <!-- Auditoria -->
+  <div class="sub-section active" data-sub-tab="auditoria">
   <div class="card" id="card-auditoria" role="region" aria-label="Auditoria de Dados">
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Auditoria de Dados <span id="badge-auditoria"></span></h2>
     <div id="auditoria-content"></div>
   </div>
+  </div>
 
   <!-- Anti-Fraude -->
+  <div class="sub-section active" data-sub-tab="antifraude">
   <div class="card" id="card-antifraude" role="region" aria-label="Anti-Fraude" style="display:none;border-left:4px solid #DC2626">
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Anti-Fraude &amp; Segurança</h2>
     <div id="antifraude-content"></div>
+  </div>
   </div>
 
   </section><!-- /seguranca -->
@@ -2353,7 +2434,14 @@ mark.search-hit{
   <!-- ─── ABA: DADOS ─── -->
   <section class="tab-section" data-tab="dados" role="tabpanel" aria-labelledby="tab-dados" style="display:none">
 
+  <nav class="sub-tab-bar" role="tablist" aria-label="Sub-seções de Dados">
+    <button class="sub-tab-btn active" role="tab" data-sub-tab="tudo"        aria-selected="true"  onclick="_trocarSubAba('dados','tudo')">       <span class="sub-tab-emoji" aria-hidden="true">▦</span>Tudo</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="tabela"      aria-selected="false" onclick="_trocarSubAba('dados','tabela')">     <span class="sub-tab-emoji" aria-hidden="true">📋</span>Tabela</button>
+    <button class="sub-tab-btn"        role="tab" data-sub-tab="comparativo" aria-selected="false" onclick="_trocarSubAba('dados','comparativo')"><span class="sub-tab-emoji" aria-hidden="true">⚖</span>Comparativo</button>
+  </nav>
+
   <!-- Dados brutos -->
+  <div class="sub-section active" data-sub-tab="tabela">
   <div class="card" id="card-dados" role="region" aria-label="Tabela de Dados">
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Dados <span id="dados-info" style="font-size:11px;font-weight:normal;color:#888;text-transform:none"></span></h2>
     <div style="margin-bottom:10px">
@@ -2375,12 +2463,15 @@ mark.search-hit{
     </div>
     <div class="tbl-wrap"><table id="tabela-dados" role="table"><thead id="thead-dados"></thead><tbody id="tbody-dados"></tbody></table></div>
   </div>
+  </div>
 
   <!-- Comparativo de Períodos (fica em Dados porque depende de carregar segundo arquivo) -->
+  <div class="sub-section active" data-sub-tab="comparativo">
   <div class="card" id="card-comparativo" style="display:none">
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Comparativo de Períodos <span id="comparativo-labels" style="font-size:11px;font-weight:400;color:var(--text-2);text-transform:none;letter-spacing:0"></span></h2>
     <div id="comparativo-content"></div>
     <div class="chart-box-sm"><canvas id="chart-comparativo"></canvas></div>
+  </div>
   </div>
 
   </section><!-- /dados -->
@@ -4315,11 +4406,17 @@ const _SIDEBAR_TOC = {
 };
 
 let _abaAtual = 'visao';
+// Sub-tab atual por aba principal — "tudo" mostra todas as sections
+const _subAbaPorAba = { visao:'tudo', analise:'tudo', seguranca:'tudo', dados:'tudo', ia:'tudo' };
+// Quais abas têm sub-tabs configuradas
+const _ABAS_COM_SUBTABS = ['analise', 'seguranca', 'dados'];
+const _LS_KEY_TAB = 'fluxopro_tab_state';
 
 // Troca de aba — esconde sections antigas, mostra a clicada, regenera
 // sidebar, reseta scroll. Reaplica animações dos cards visíveis.
-function _trocarAbaDashboard(tab) {
-  if (tab === _abaAtual) return;
+function _trocarAbaDashboard(tab, opts) {
+  opts = opts || {};
+  if (tab === _abaAtual && !opts.force) return;
   // Atualizar botões da tab-bar
   document.querySelectorAll('.tab-btn').forEach(btn => {
     const ativo = btn.dataset.tab === tab;
@@ -4333,14 +4430,107 @@ function _trocarAbaDashboard(tab) {
     sec.style.display = ativo ? '' : 'none';
   });
   _abaAtual = tab;
-  _gerarSidebarTOC(tab);
-  // Reset scroll para o topo do conteúdo (sem afetar viewport todo)
-  window.scrollTo({ top: document.querySelector('.tab-bar')?.offsetTop || 0, behavior: 'smooth' });
+  // Sidebar TOC só faz sentido em abas SEM sub-tabs
+  const layout = document.querySelector('.dashboard-layout');
+  if (layout) layout.classList.toggle('no-sidebar', _ABAS_COM_SUBTABS.includes(tab));
+  if (!_ABAS_COM_SUBTABS.includes(tab)) _gerarSidebarTOC(tab);
+  // Aplicar sub-tab persistida (ou "tudo" por default)
+  if (_ABAS_COM_SUBTABS.includes(tab)) {
+    _trocarSubAba(tab, _subAbaPorAba[tab] || 'tudo', { skipScroll: true, skipPersist: opts.skipPersist });
+  }
+  // Reset scroll para o topo do conteúdo
+  if (!opts.skipScroll) {
+    window.scrollTo({ top: document.querySelector('.tab-bar')?.offsetTop || 0, behavior: 'smooth' });
+  }
   // Charts dentro da nova aba podem ter rendered hidden — força resize
-  // para preencher canvas corretamente.
   requestAnimationFrame(() => {
     [_chartAging, _chartFluxoM, _chartComparativo].forEach(c => { try { c?.resize(); } catch (_) {} });
   });
+  // URL hash + persistência localStorage
+  if (!opts.skipHash) _atualizarHashRoute();
+  if (!opts.skipPersist) _salvarTabState();
+}
+
+// Troca a sub-tab dentro de uma aba principal
+function _trocarSubAba(tab, subTab, opts) {
+  opts = opts || {};
+  _subAbaPorAba[tab] = subTab;
+  const section = document.querySelector(`.tab-section[data-tab="${tab}"]`);
+  if (!section) return;
+  // Atualizar botões da sub-tab-bar
+  section.querySelectorAll('.sub-tab-btn').forEach(btn => {
+    const ativo = btn.dataset.subTab === subTab;
+    btn.classList.toggle('active', ativo);
+    btn.setAttribute('aria-selected', ativo ? 'true' : 'false');
+  });
+  // Mostrar/esconder sub-sections — "tudo" mostra todas
+  section.querySelectorAll('.sub-section').forEach(sub => {
+    const ativo = subTab === 'tudo' || sub.dataset.subTab === subTab;
+    sub.classList.toggle('active', ativo);
+    sub.style.display = ativo ? '' : 'none';
+  });
+  if (!opts.skipScroll) {
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  // Chart resize (canvas hidden → visible)
+  requestAnimationFrame(() => {
+    [_chartAging, _chartFluxoM, _chartComparativo].forEach(c => { try { c?.resize(); } catch (_) {} });
+  });
+  if (!opts.skipHash) _atualizarHashRoute();
+  if (!opts.skipPersist) _salvarTabState();
+}
+
+// ── URL HASH ROUTING ─────────────────────────────────────────
+// Formato: #/tab[/subtab]   ex: #/analise/dre, #/seguranca, #/dados/comparativo
+function _atualizarHashRoute() {
+  const sub = _subAbaPorAba[_abaAtual];
+  const hash = (sub && sub !== 'tudo' && _ABAS_COM_SUBTABS.includes(_abaAtual))
+    ? `#/${_abaAtual}/${sub}`
+    : `#/${_abaAtual}`;
+  if (location.hash !== hash) {
+    history.replaceState(null, '', hash);
+  }
+}
+
+function _aplicarHashRoute() {
+  const h = (location.hash || '').replace(/^#\//, '').split('/').filter(Boolean);
+  if (!h.length) return;
+  const tab = h[0];
+  const sub = h[1] || 'tudo';
+  if (!document.querySelector(`.tab-section[data-tab="${tab}"]`)) return;
+  _trocarAbaDashboard(tab, { skipHash: true, skipPersist: true, skipScroll: true, force: true });
+  if (_ABAS_COM_SUBTABS.includes(tab) && sub) {
+    _trocarSubAba(tab, sub, { skipHash: true, skipPersist: true, skipScroll: true });
+  }
+}
+
+// ── PERSISTÊNCIA LOCALSTORAGE ────────────────────────────────
+function _salvarTabState() {
+  try {
+    const collapsed = Array.from(document.querySelectorAll('.card.collapsed'))
+      .map(c => c.id).filter(Boolean);
+    localStorage.setItem(_LS_KEY_TAB, JSON.stringify({
+      aba: _abaAtual, sub: { ..._subAbaPorAba }, collapsed
+    }));
+  } catch (_) { /* storage indisponível */ }
+}
+
+function _restaurarTabState() {
+  try {
+    const raw = localStorage.getItem(_LS_KEY_TAB);
+    if (!raw) return;
+    const st = JSON.parse(raw);
+    if (st.sub) Object.assign(_subAbaPorAba, st.sub);
+    if (st.collapsed && Array.isArray(st.collapsed)) {
+      st.collapsed.forEach(id => {
+        const c = document.getElementById(id);
+        if (c) c.classList.add('collapsed');
+      });
+    }
+    if (st.aba && document.querySelector(`.tab-section[data-tab="${st.aba}"]`)) {
+      _trocarAbaDashboard(st.aba, { skipHash: true, skipPersist: true, skipScroll: true, force: true });
+    }
+  } catch (_) { /* corrupted/storage indisponível */ }
 }
 
 // Gera o conteúdo do sidebar TOC baseado nos cards REALMENTE visíveis
@@ -4405,18 +4595,36 @@ function _adicionarCollapseToggles() {
   document.querySelectorAll('#dashboard .card').forEach(card => {
     const h2 = card.querySelector(':scope > h2');
     if (!h2) return;
-    if (card.querySelector(':scope > .card-collapse-btn')) return;
+    if (card.querySelector(':scope > .card-actions')) return;
+    // Container com 2 botões: foco (⛶) + colapsar (⌵)
+    const wrap = document.createElement('div');
+    wrap.className = 'card-actions';
+    // Botão foco/fullscreen — só em cards com id (pra rotear via _entrarModoFoco)
+    if (card.id) {
+      const btnFoco = document.createElement('button');
+      btnFoco.className = 'card-focus-btn';
+      btnFoco.setAttribute('aria-label', 'Modo foco (fullscreen)');
+      btnFoco.setAttribute('type', 'button');
+      btnFoco.title = 'Modo foco';
+      btnFoco.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+      btnFoco.onclick = e => { e.stopPropagation(); _entrarModoFoco(card.id); };
+      wrap.appendChild(btnFoco);
+    }
+    // Botão colapsar
     const btn = document.createElement('button');
     btn.className = 'card-collapse-btn';
     btn.setAttribute('aria-label', 'Colapsar/expandir card');
     btn.setAttribute('type', 'button');
+    btn.title = 'Colapsar';
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
     btn.onclick = e => {
       e.stopPropagation();
       card.classList.toggle('collapsed');
       btn.setAttribute('aria-expanded', card.classList.contains('collapsed') ? 'false' : 'true');
+      _salvarTabState();
     };
-    card.appendChild(btn);
+    wrap.appendChild(btn);
+    card.appendChild(wrap);
   });
 }
 
@@ -4435,6 +4643,91 @@ function _atualizarBadgeSeguranca() {
   badge.textContent = count;
   badge.style.display = count > 0 ? 'inline-flex' : 'none';
 }
+
+// ── ATALHOS DE TECLADO ──────────────────────────────────────
+// 1-5   trocam abas principais
+// ←→    navegam sub-tabs da aba atual
+// ↑↓    navegam sidebar TOC
+// /     foca busca de tabela
+// Esc   sai do modo foco
+const _ORDEM_ABAS = ['visao','analise','seguranca','dados','ia'];
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement?.tagName;
+  const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  // Atalhos 1-5 só fora de inputs e com dashboard visível
+  if (!isInput && _dashboardVisivel) {
+    if (/^[1-5]$/.test(e.key)) {
+      const idx = parseInt(e.key, 10) - 1;
+      const novaAba = _ORDEM_ABAS[idx];
+      if (novaAba && novaAba !== _abaAtual) {
+        e.preventDefault();
+        _trocarAbaDashboard(novaAba);
+      }
+      return;
+    }
+    if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && _ABAS_COM_SUBTABS.includes(_abaAtual)) {
+      const section = document.querySelector(`.tab-section[data-tab="${_abaAtual}"]`);
+      const btns = section ? Array.from(section.querySelectorAll('.sub-tab-btn')) : [];
+      if (btns.length < 2) return;
+      const cur = btns.findIndex(b => b.classList.contains('active'));
+      const next = e.key === 'ArrowRight'
+        ? (cur + 1) % btns.length
+        : (cur - 1 + btns.length) % btns.length;
+      e.preventDefault();
+      _trocarSubAba(_abaAtual, btns[next].dataset.subTab);
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const itens = Array.from(document.querySelectorAll('.dashboard-sidebar .sidebar-item'));
+      if (!itens.length) return;
+      const cur = itens.findIndex(i => i.classList.contains('active'));
+      const next = e.key === 'ArrowDown'
+        ? Math.min(cur + 1, itens.length - 1)
+        : Math.max(cur - 1, 0);
+      if (next !== cur) {
+        e.preventDefault();
+        itens[next].click();
+      }
+      return;
+    }
+  }
+  // Esc — sai do modo foco (mesmo em inputs)
+  if (e.key === 'Escape' && document.body.classList.contains('focus-mode')) {
+    e.preventDefault();
+    _sairModoFoco();
+  }
+});
+
+// ── MODO FOCO ──────────────────────────────────────────────────
+// Click no ⛶ do card amplia ele e esconde tudo mais. Esc volta.
+function _entrarModoFoco(cardId) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  // Limpa qualquer foco anterior
+  document.querySelectorAll('.focus-target').forEach(c => c.classList.remove('focus-target'));
+  card.classList.add('focus-target');
+  document.body.classList.add('focus-mode');
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  requestAnimationFrame(() => {
+    [_chartAging, _chartFluxoM, _chartComparativo].forEach(c => { try { c?.resize(); } catch (_) {} });
+  });
+}
+
+function _sairModoFoco() {
+  document.body.classList.remove('focus-mode');
+  document.querySelectorAll('.focus-target').forEach(c => c.classList.remove('focus-target'));
+  requestAnimationFrame(() => {
+    [_chartAging, _chartFluxoM, _chartComparativo].forEach(c => { try { c?.resize(); } catch (_) {} });
+  });
+}
+
+// Inicialização da nova navegação: aplica hash + restaura state
+window.addEventListener('hashchange', _aplicarHashRoute);
+window.addEventListener('DOMContentLoaded', () => {
+  _restaurarTabState();
+  // Hash da URL tem prioridade sobre localStorage
+  if (location.hash) _aplicarHashRoute();
+});
 
 // Lively: easing global do Chart.js — animações mais suaves e elegantes
 // em todos os charts (aging, fluxo, comparativo). Respeita reduced-motion.
