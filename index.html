@@ -2464,9 +2464,23 @@ function carregarArquivoComparativo(file) {
       _colsComparativos = Object.assign({}, _cols);
       const det = detectarColunas(headers);
       Object.entries(det).forEach(([k,v]) => { if (v && headers.includes(v)) _colsComparativos[k] = v; });
-      // Validar que a coluna valor existe no arquivo comparativo
-      if (!_colsComparativos.valor || !headers.includes(_colsComparativos.valor)) {
+      // Validação completa de paridade: cada campo em _cols que existe no
+      // dataset principal precisa ter equivalente no comparativo. Se a coluna
+      // herdada de _cols não existe nos headers do comparativo, anula —
+      // calcularKPIs/calcularAging vão tratar como ausente.
+      for (const campo of Object.keys(_colsComparativos)) {
+        const h = _colsComparativos[campo];
+        if (h && !headers.includes(h)) _colsComparativos[campo] = null;
+      }
+      // Validar coluna obrigatória (valor) no arquivo comparativo
+      if (!_colsComparativos.valor) {
         throw new Error('Coluna de valores não encontrada no arquivo comparativo. Verifique se os cabeçalhos são compatíveis.');
+      }
+      // Aviso UX se mapeamentos importantes ficaram sem equivalente
+      const _camposEssenciais = ['data','vencimento','entidade','categoria'];
+      const _semParidade = _camposEssenciais.filter(c => _cols[c] && !_colsComparativos[c]);
+      if (_semParidade.length) {
+        _toast(`Comparativo sem coluna(s) equivalente(s): ${_semParidade.join(', ')} — métricas dependentes serão zeradas`, 4500, 'aviso');
       }
       _kpisComparativos = calcularKPIs(dados, _colsComparativos);
       mostrarLoader(false);
@@ -2654,6 +2668,10 @@ async function executarAnalise() {
       _atualizarStep(3);
       _toast(`${_dadosOriginais.length.toLocaleString('pt-BR')} registros analisados com sucesso`, 3500, 'sucesso');
     } catch(err) {
+      // Rollback de caches parciais — sem isso, briefing IA usaria dados
+      // misturados (ex: _ultimosKpis novo + _ultimaAuditoria do dataset anterior).
+      _ultimosKpis = _ultimaAuditoria = _ultimoAging = _ultimoDre = _ultimoPareto = _ultimoAntiFraude = null;
+      _ultimaAnaliseClaude = '';
       _mostrarErro('Erro na análise: ' + err.message);
       document.getElementById('upload-area').style.display = 'block';
       document.getElementById('dashboard').style.display   = 'none';
