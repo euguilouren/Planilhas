@@ -778,7 +778,7 @@ function renderFluxoPeriodo(dados, cols) {
     const totDesp = linhas.reduce((a,r)=>a+r.despesa, 0);
     const totRes  = totRec - totDesp;
     const rows = linhas.map(r => {
-      const cor = r.resultado >= 0 ? '#D1FAE5' : '#FEE2E2';
+      const cor = r.resultado >= 0 ? 'var(--verde-bg)' : 'var(--vermelho-bg)';
       const corR = r.resultado >= 0 ? 'var(--success)' : 'var(--danger)';
       const _pct  = isFinite(r.pct) ? r.pct : 0;
       const pctStr = (_pct >= 0 ? '+' : '') + _pct.toFixed(1) + '%';
@@ -791,7 +791,7 @@ function renderFluxoPeriodo(dados, cols) {
         <td style="text-align:right;font-weight:bold;color:${corR}">${fmtBRL(r.resultado)}</td>
         <td style="text-align:center">${pctStr}</td></tr>`;
     }).join('');
-    const corTot = totRes >= 0 ? '#D1FAE5' : '#FEE2E2';
+    const corTot = totRes >= 0 ? 'var(--verde-bg)' : 'var(--vermelho-bg)';
     const corRTot = totRes >= 0 ? 'var(--success)' : 'var(--danger)';
     const totRow = `<tr style="background:${corTot};font-weight:bold;border-top:2px solid var(--navy-2)">
       <td>TOTAL</td>
@@ -2751,8 +2751,8 @@ function renderScoreFinanceiro(s) {
       const pos = diff > 0;
       deltaEl.textContent = (pos ? '▲ +' : '▼ ') + diff + ' pts';
       deltaEl.style.display = 'inline-block';
-      deltaEl.style.background = pos ? '#e6f4ea' : '#fce8e6';
-      deltaEl.style.color      = pos ? '#1e7e34' : '#b71c1c';
+      deltaEl.style.background = pos ? 'var(--verde-bg)' : 'var(--vermelho-bg)';
+      deltaEl.style.color      = pos ? 'var(--verde)' : 'var(--vermelho)';
     } else {
       deltaEl.style.display = 'none';
     }
@@ -2820,7 +2820,7 @@ function renderVerificacao(integ) {
   if (!card || !cont) return;
   card.style.display = 'block';
 
-  const corBorda = integ.confianca >= 80 ? 'var(--verde)' : integ.confianca >= 60 ? '#D97706' : '#C00000';
+  const corBorda = integ.confianca >= 80 ? 'var(--verde)' : integ.confianca >= 60 ? 'var(--amarelo)' : 'var(--vermelho)';
   const labelConf = integ.confianca >= 80 ? 'VERIFICADO' : integ.confianca >= 60 ? 'PARCIAL' : 'REVISAR';
   card.style.borderLeftColor = corBorda;
 
