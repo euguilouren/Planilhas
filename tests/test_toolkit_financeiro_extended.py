@@ -583,6 +583,26 @@ class TestOFXEdgeCases:
         with pytest.raises(ValueError):
             Leitor.ler_ofx(str(p))
 
+    def test_ofx_fitid_vazio_gera_id_synthetic(self, tmp_path):
+        """Regressão: FITID ausente/vazio gerava ID='' em massa → false
+        positives em detectar_duplicatas. Paridade com parseOFX (JS:1120).
+        """
+        content = textwrap.dedent("""\
+            <OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS>
+            <STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20240101<TRNAMT>-10.00<MEMO>sem fitid 1</STMTTRN>
+            <STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20240102<TRNAMT>-20.00<MEMO>sem fitid 2</STMTTRN>
+            <STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20240103<TRNAMT>-30.00<MEMO>sem fitid 3</STMTTRN>
+            </STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>
+        """)
+        p = tmp_path / 'sem_fitid.ofx'
+        p.write_text(content, encoding='utf-8')
+        df = Leitor.ler_ofx(str(p))
+        assert len(df) == 3
+        ids = df['ID'].tolist()
+        # Cada ID precisa ser único (não ''), com prefixo synthetic 'ofx-'
+        assert len(set(ids)) == 3, f"IDs duplicados: {ids}"
+        assert all(str(i).startswith('ofx-') for i in ids), f"IDs sem prefixo: {ids}"
+
     def test_ofx_windows1252(self, tmp_path):
         content = (
             '<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS>'

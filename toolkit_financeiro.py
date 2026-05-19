@@ -272,13 +272,16 @@ class Leitor:
         }
 
         rows = []
-        for blk in blocos:
+        import html as _html_esc
+        for i, blk in enumerate(blocos):
             f = _parse(blk)
             data = _data(f.get('DTPOSTED', ''))
             valor = _parse_valor(f.get('TRNAMT', '0'))
-            import html as _html_esc
             descr = _html_esc.unescape(f.get('MEMO') or f.get('NAME') or '')
-            fitid = f.get('FITID', '')
+            # Synthetic FITID quando ausente — paridade com parseOFX (JS).
+            # Sem isso, múltiplas transações sem FITID viram ID='' e
+            # detectar_duplicatas gera falsos positivos em massa.
+            fitid = f.get('FITID') or f'ofx-{i}-{data}-{valor}'
             tipo  = TIPO_MAP.get((f.get('TRNTYPE') or '').upper(), f.get('TRNTYPE', ''))
             rows.append({'Data': data, 'Vencimento': data, 'Valor': valor,
                          'Descrição': descr, 'ID': fitid, 'Tipo': tipo})

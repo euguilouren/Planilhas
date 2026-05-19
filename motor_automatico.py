@@ -144,6 +144,8 @@ class AnalisadorClaudeAPI:
         except _anthropic.APIConnectionError as e:
             logger.warning("Claude API: falha de conexão — %s", e)
         except _anthropic.APIError as e:
+            # Cobre APITimeoutError (subclass) — não tem branch específico
+            # porque tests legacy não fazem mock dessa classe
             logger.warning("Claude API: erro inesperado — %s", e)
         return ''
 
