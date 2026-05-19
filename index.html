@@ -4086,7 +4086,13 @@ window.addEventListener('DOMContentLoaded', () => {
 // PWA — Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () =>
-    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(e => console.warn('SW:', e))
+    // updateViaCache:'none' força browser a re-baixar sw.js a cada load
+    // (sem cache HTTP do próprio worker). Sem isso, mudar CACHE_NAME no
+    // sw.js não invalida cache antigo — o browser continua usando o sw.js
+    // cached e o usuário fica preso na versão antiga indefinidamente.
+    navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' })
+      .then(reg => reg.update())
+      .catch(e => console.warn('SW:', e))
   );
 }
 </script>
