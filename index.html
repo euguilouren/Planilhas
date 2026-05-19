@@ -1434,6 +1434,154 @@ body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:#E8EDF4;
 .erp-confianca{font-weight:400;color:#3B82F6;font-size:11.5px}
 /* Dashboard */
 #dashboard{display:none;max-width:1260px;margin:0 auto;padding:28px 24px;animation:fadeUp .4s ease-out both}
+
+/* ════════════════════════════════════════════════════════════════
+   LAYOUT — Tabs + Sidebar TOC + Cards colapsáveis
+   ════════════════════════════════════════════════════════════════ */
+
+/* Barra de abas */
+.tab-bar{
+  display:flex;gap:4px;margin:0 0 18px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:6px;
+  box-shadow:var(--shadow-sm);
+  position:sticky;top:0;z-index:30;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none
+}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:10px 16px;font-size:13px;font-weight:600;
+  color:var(--text-2);background:transparent;border:none;
+  border-radius:var(--radius-sm);cursor:pointer;
+  white-space:nowrap;font-family:inherit;
+  transition:background var(--t-fast),color var(--t-fast),transform var(--t-fast);
+  min-height:42px;letter-spacing:.1px
+}
+.tab-btn:hover{background:var(--surface-2);color:var(--text)}
+.tab-btn:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+.tab-btn.active{
+  background:linear-gradient(135deg,var(--brand) 0%,var(--brand-2) 100%);
+  color:#fff;
+  box-shadow:0 2px 8px rgba(8,145,178,.3),inset 0 1px 0 rgba(255,255,255,.2)
+}
+.tab-btn.active:hover{filter:brightness(1.05)}
+.tab-btn .tab-emoji{font-size:15px;line-height:1}
+.tab-btn .tab-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--vermelho);color:#fff;font-size:10px;font-weight:700;
+  min-width:18px;height:18px;border-radius:9px;padding:0 5px;margin-left:4px
+}
+.tab-btn.active .tab-badge{background:rgba(255,255,255,.25)}
+
+/* Layout principal — sidebar TOC + content */
+.dashboard-layout{
+  display:grid;grid-template-columns:200px 1fr;gap:24px;
+  align-items:start
+}
+.dashboard-sidebar{
+  position:sticky;top:62px;
+  align-self:start;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 10px;
+  box-shadow:var(--shadow-sm);
+  max-height:calc(100vh - 80px);overflow-y:auto;
+  scrollbar-width:thin
+}
+.sidebar-titulo{
+  font-size:10px;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--text-3);font-weight:700;padding:0 8px 8px;
+  border-bottom:1px solid var(--border);margin-bottom:6px
+}
+.sidebar-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 10px;font-size:12.5px;font-weight:500;
+  color:var(--text-2);background:transparent;border:none;
+  border-radius:var(--radius-sm);cursor:pointer;
+  width:100%;text-align:left;font-family:inherit;
+  transition:background var(--t-fast),color var(--t-fast),padding-left var(--t-fast);
+  position:relative;line-height:1.3
+}
+.sidebar-item:hover{background:var(--surface-2);color:var(--text);padding-left:14px}
+.sidebar-item:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+.sidebar-item.active{
+  background:var(--azul3);color:var(--navy-3);font-weight:700
+}
+.sidebar-item.active::before{
+  content:'';position:absolute;left:0;top:20%;height:60%;width:3px;
+  background:var(--brand);border-radius:0 2px 2px 0
+}
+.sidebar-item .sidebar-emoji{font-size:14px;line-height:1;flex-shrink:0}
+
+/* Content area */
+.dashboard-content{min-width:0}
+.tab-section{display:none;animation:fadeUp .35s cubic-bezier(.16,1,.3,1) both}
+.tab-section.active{display:block}
+
+/* Cards colapsáveis */
+.card{position:relative}
+.card-collapse-btn{
+  position:absolute;top:14px;right:14px;
+  background:transparent;border:none;cursor:pointer;
+  padding:4px;border-radius:var(--radius-sm);
+  color:var(--text-3);display:inline-flex;align-items:center;justify-content:center;
+  transition:background var(--t-fast),color var(--t-fast),transform var(--t-base);
+  z-index:2
+}
+.card-collapse-btn:hover{background:var(--surface-2);color:var(--text)}
+.card-collapse-btn:focus-visible{outline:none;box-shadow:var(--shadow-focus)}
+.card-collapse-btn svg{width:14px;height:14px;transition:transform var(--t-base)}
+.card.collapsed .card-collapse-btn svg{transform:rotate(-90deg)}
+.card.collapsed > *:not(h2):not(.card-collapse-btn){
+  display:none!important
+}
+.card.collapsed{padding-bottom:18px}
+.card.collapsed h2{margin-bottom:0;padding-bottom:0;border-bottom:none}
+
+/* Animação de entrada das seções (similar ao fadeUp existente) — refinada */
+@keyframes tabFade{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:none}
+}
+.tab-section.active{animation:tabFade .4s cubic-bezier(.16,1,.3,1) both}
+
+/* Mobile — tabs scrollable, sidebar vira chips horizontais */
+@media(max-width:900px){
+  .dashboard-layout{grid-template-columns:1fr;gap:14px}
+  .dashboard-sidebar{
+    position:sticky;top:56px;z-index:25;
+    display:flex;flex-direction:row;gap:6px;overflow-x:auto;
+    padding:8px;border-radius:var(--radius-sm);
+    max-height:none
+  }
+  .dashboard-sidebar::-webkit-scrollbar{display:none}
+  .sidebar-titulo{display:none}
+  .sidebar-item{
+    flex-shrink:0;white-space:nowrap;
+    padding:8px 14px;font-size:12px;border-radius:18px;
+    border:1px solid var(--border)
+  }
+  .sidebar-item:hover{padding-left:14px}
+  .sidebar-item.active{background:var(--brand-bg);color:var(--brand-2);border-color:var(--brand)}
+  .sidebar-item.active::before{display:none}
+  .tab-bar{padding:4px;gap:2px}
+  .tab-btn{padding:9px 12px;font-size:12px;min-height:38px}
+  .tab-btn .tab-emoji{font-size:14px}
+}
+@media(max-width:600px){
+  .tab-btn{padding:8px 10px;font-size:11.5px;min-height:36px}
+  .tab-btn .tab-label{display:none}  /* só emoji em mobile pequeno */
+  .tab-btn .tab-emoji{font-size:18px}
+}
+
+/* prefers-reduced-motion */
+@media(prefers-reduced-motion:reduce){
+  .tab-section.active,.card-collapse-btn svg{animation:none!important;transition:none!important}
+  .sidebar-item:hover{padding-left:10px!important}
+}
 /* KPIs */
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
 .kpi{
@@ -2097,6 +2245,38 @@ mark.search-hit{
     </button>
   </div>
 
+  <!-- Barra de abas -->
+  <nav class="tab-bar" role="tablist" aria-label="Seções do dashboard">
+    <button class="tab-btn active" role="tab" data-tab="visao" aria-selected="true" onclick="_trocarAbaDashboard('visao')">
+      <span class="tab-emoji" aria-hidden="true">📊</span><span class="tab-label">Visão Geral</span>
+    </button>
+    <button class="tab-btn" role="tab" data-tab="analise" aria-selected="false" onclick="_trocarAbaDashboard('analise')">
+      <span class="tab-emoji" aria-hidden="true">📈</span><span class="tab-label">Análise</span>
+    </button>
+    <button class="tab-btn" role="tab" data-tab="seguranca" aria-selected="false" onclick="_trocarAbaDashboard('seguranca')">
+      <span class="tab-emoji" aria-hidden="true">🛡️</span><span class="tab-label">Segurança</span>
+      <span class="tab-badge" id="tab-badge-seguranca" style="display:none">0</span>
+    </button>
+    <button class="tab-btn" role="tab" data-tab="dados" aria-selected="false" onclick="_trocarAbaDashboard('dados')">
+      <span class="tab-emoji" aria-hidden="true">📂</span><span class="tab-label">Dados</span>
+    </button>
+    <button class="tab-btn" role="tab" data-tab="ia" aria-selected="false" onclick="_trocarAbaDashboard('ia')">
+      <span class="tab-emoji" aria-hidden="true">🤖</span><span class="tab-label">IA</span>
+    </button>
+  </nav>
+
+  <!-- Layout: sidebar TOC + content -->
+  <div class="dashboard-layout">
+    <aside class="dashboard-sidebar" role="navigation" aria-label="Navegação rápida da aba">
+      <div class="sidebar-titulo">Nesta aba</div>
+      <div id="sidebar-content"></div>
+    </aside>
+
+    <main class="dashboard-content">
+
+  <!-- ─── ABA: VISÃO GERAL ─── -->
+  <section class="tab-section active" data-tab="visao" role="tabpanel" aria-labelledby="tab-visao">
+
   <!-- Score Financeiro -->
   <div class="card score-card" id="card-score" role="region" aria-label="Score Financeiro" style="display:none">
     <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
@@ -2122,22 +2302,21 @@ mark.search-hit{
   <!-- KPIs -->
   <div class="kpis" id="kpis"></div>
 
-  <!-- Fluxo por Período -->
-  <div class="card" id="card-fluxo" role="region" aria-label="Fluxo por Período" style="display:none">
-    <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Fluxo por Período</h2>
-    <div id="fluxo-content"></div>
-  </div>
-
-  <!-- Verificação de integridade -->
+  <!-- Verificação de integridade (movida para topo da Visão Geral) -->
   <div class="card" id="card-verificacao" style="display:none;border-left:4px solid var(--verde)">
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Verificação de Integridade</h2>
     <div id="verificacao-content"></div>
   </div>
 
-  <!-- Auditoria -->
-  <div class="card" id="card-auditoria" role="region" aria-label="Auditoria de Dados">
-    <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Auditoria de Dados <span id="badge-auditoria"></span></h2>
-    <div id="auditoria-content"></div>
+  </section><!-- /visao -->
+
+  <!-- ─── ABA: ANÁLISE ─── -->
+  <section class="tab-section" data-tab="analise" role="tabpanel" aria-labelledby="tab-analise" style="display:none">
+
+  <!-- Fluxo por Período -->
+  <div class="card" id="card-fluxo" role="region" aria-label="Fluxo por Período" style="display:none">
+    <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Fluxo por Período</h2>
+    <div id="fluxo-content"></div>
   </div>
 
   <!-- Grid: Aging + gráfico -->
@@ -2149,7 +2328,18 @@ mark.search-hit{
   <!-- Grid: DRE + Pareto -->
   <div class="grid2">
     <div class="card" id="card-dre" role="region" aria-label="DRE"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>DRE</h2><div id="dre-content"><div class="empty">Categorias não detectadas</div></div></div>
-    <div class="card" role="region" aria-label="Análise Pareto"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Pareto — Top Entidades</h2><div id="pareto-content"></div></div>
+    <div class="card" id="card-pareto" role="region" aria-label="Análise Pareto"><h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Pareto — Top Entidades</h2><div id="pareto-content"></div></div>
+  </div>
+
+  </section><!-- /analise -->
+
+  <!-- ─── ABA: SEGURANÇA ─── -->
+  <section class="tab-section" data-tab="seguranca" role="tabpanel" aria-labelledby="tab-seguranca" style="display:none">
+
+  <!-- Auditoria -->
+  <div class="card" id="card-auditoria" role="region" aria-label="Auditoria de Dados">
+    <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Auditoria de Dados <span id="badge-auditoria"></span></h2>
+    <div id="auditoria-content"></div>
   </div>
 
   <!-- Anti-Fraude -->
@@ -2157,6 +2347,11 @@ mark.search-hit{
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Anti-Fraude &amp; Segurança</h2>
     <div id="antifraude-content"></div>
   </div>
+
+  </section><!-- /seguranca -->
+
+  <!-- ─── ABA: DADOS ─── -->
+  <section class="tab-section" data-tab="dados" role="tabpanel" aria-labelledby="tab-dados" style="display:none">
 
   <!-- Dados brutos -->
   <div class="card" id="card-dados" role="region" aria-label="Tabela de Dados">
@@ -2181,12 +2376,17 @@ mark.search-hit{
     <div class="tbl-wrap"><table id="tabela-dados" role="table"><thead id="thead-dados"></thead><tbody id="tbody-dados"></tbody></table></div>
   </div>
 
-  <!-- Comparativo de Períodos -->
+  <!-- Comparativo de Períodos (fica em Dados porque depende de carregar segundo arquivo) -->
   <div class="card" id="card-comparativo" style="display:none">
     <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Comparativo de Períodos <span id="comparativo-labels" style="font-size:11px;font-weight:400;color:var(--text-2);text-transform:none;letter-spacing:0"></span></h2>
     <div id="comparativo-content"></div>
     <div class="chart-box-sm"><canvas id="chart-comparativo"></canvas></div>
   </div>
+
+  </section><!-- /dados -->
+
+  <!-- ─── ABA: IA ─── -->
+  <section class="tab-section" data-tab="ia" role="tabpanel" aria-labelledby="tab-ia" style="display:none">
 
   <!-- Painel IA -->
   <div class="card" id="card-claude" style="display:none;border:2px solid #C4B5FD">
@@ -2217,6 +2417,11 @@ mark.search-hit{
     </div>
     <div id="claude-erro" style="display:none;background:#FEE2E2;border:1px solid #FECACA;border-radius:8px;padding:12px;color:#991B1B;font-size:13px"></div>
   </div>
+
+  </section><!-- /ia -->
+
+    </main>
+  </div><!-- /dashboard-layout -->
 </div>
 
 <script>
@@ -2850,6 +3055,11 @@ async function executarAnalise() {
       document.getElementById('btn-comparar').style.display = 'inline-block';
       document.getElementById('tag-arquivo').textContent   = _nomeArquivo;
       _atualizarStep(3);
+      // Pós-análise: ativar layout de abas (sidebar TOC + collapse toggles + badge)
+      _adicionarCollapseToggles();
+      _gerarSidebarTOC(_abaAtual);
+      _atualizarBadgeSeguranca();
+      requestAnimationFrame(() => _ativarScrollSpy());
       _toast(`${_dadosOriginais.length.toLocaleString('pt-BR')} registros analisados com sucesso`, 3500, 'sucesso');
     } catch(err) {
       // Rollback de caches parciais — sem isso, briefing IA usaria dados
@@ -3085,6 +3295,8 @@ function confirmarAuditoria(key) {
   const sc = document.getElementById('auditoria-content')?.scrollTop || 0;
   renderAuditoria(_ultimaAuditoria);
   requestAnimationFrame(() => { const el = document.getElementById('auditoria-content'); if (el) el.scrollTop = sc; });
+  // Reflete mudança no badge da tab Segurança (alertas pendentes diminuem)
+  if (typeof _atualizarBadgeSeguranca === 'function') _atualizarBadgeSeguranca();
 }
 
 function renderAuditoria(lista) {
@@ -4070,6 +4282,159 @@ function _renderHistorico() {
 
 // Renderizar histórico ao carregar a página
 window.addEventListener('DOMContentLoaded', _renderHistorico);
+
+// ════════════════════════════════════════════════════════════════
+// TABS + SIDEBAR + COLLAPSIBLE CARDS
+// ════════════════════════════════════════════════════════════════
+
+// Configuração de quais cards aparecem no sidebar TOC de cada aba.
+// Cada item: { id (anchor scroll), label (texto), emoji, optional }
+const _SIDEBAR_TOC = {
+  visao: [
+    { id: 'card-score',       label: 'Score',         emoji: '🎯', optional: true },
+    { id: 'kpis',             label: 'KPIs',          emoji: '💰' },
+    { id: 'card-verificacao', label: 'Integridade',   emoji: '✓',  optional: true },
+  ],
+  analise: [
+    { id: 'card-fluxo',  label: 'Fluxo Período', emoji: '📊', optional: true },
+    { id: 'card-aging',  label: 'Aging',         emoji: '⏱' },
+    { id: 'card-dre',    label: 'DRE',           emoji: '📋' },
+    { id: 'card-pareto', label: 'Pareto',        emoji: '🔝' },
+  ],
+  seguranca: [
+    { id: 'card-auditoria',  label: 'Auditoria',  emoji: '🔍' },
+    { id: 'card-antifraude', label: 'Anti-Fraude', emoji: '🛡', optional: true },
+  ],
+  dados: [
+    { id: 'card-dados',       label: 'Tabela',       emoji: '📋' },
+    { id: 'card-comparativo', label: 'Comparativo',  emoji: '⚖', optional: true },
+  ],
+  ia: [
+    { id: 'card-claude', label: 'Análise IA', emoji: '🤖' },
+  ],
+};
+
+let _abaAtual = 'visao';
+
+// Troca de aba — esconde sections antigas, mostra a clicada, regenera
+// sidebar, reseta scroll. Reaplica animações dos cards visíveis.
+function _trocarAbaDashboard(tab) {
+  if (tab === _abaAtual) return;
+  // Atualizar botões da tab-bar
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const ativo = btn.dataset.tab === tab;
+    btn.classList.toggle('active', ativo);
+    btn.setAttribute('aria-selected', ativo ? 'true' : 'false');
+  });
+  // Mostrar/esconder sections
+  document.querySelectorAll('.tab-section').forEach(sec => {
+    const ativo = sec.dataset.tab === tab;
+    sec.classList.toggle('active', ativo);
+    sec.style.display = ativo ? '' : 'none';
+  });
+  _abaAtual = tab;
+  _gerarSidebarTOC(tab);
+  // Reset scroll para o topo do conteúdo (sem afetar viewport todo)
+  window.scrollTo({ top: document.querySelector('.tab-bar')?.offsetTop || 0, behavior: 'smooth' });
+  // Charts dentro da nova aba podem ter rendered hidden — força resize
+  // para preencher canvas corretamente.
+  requestAnimationFrame(() => {
+    [_chartAging, _chartFluxoM, _chartComparativo].forEach(c => { try { c?.resize(); } catch (_) {} });
+  });
+}
+
+// Gera o conteúdo do sidebar TOC baseado nos cards REALMENTE visíveis
+// da aba atual (respeita display:none de cards opcionais como Score,
+// Verificação, Anti-Fraude que só aparecem após análise).
+function _gerarSidebarTOC(tab) {
+  const wrap = document.getElementById('sidebar-content');
+  if (!wrap) return;
+  const items = _SIDEBAR_TOC[tab] || [];
+  const visiveis = items.filter(it => {
+    const el = document.getElementById(it.id);
+    if (!el) return false;
+    if (!it.optional) return true;
+    // Para opcionais: visíveis se o card NÃO está display:none
+    return getComputedStyle(el).display !== 'none';
+  });
+  if (!visiveis.length) {
+    wrap.innerHTML = '<div style="font-size:11px;color:var(--text-3);padding:8px 10px;font-style:italic">Carregue dados para navegar</div>';
+    return;
+  }
+  wrap.innerHTML = visiveis.map(it =>
+    `<button class="sidebar-item" data-target="${esc(it.id)}" onclick="_irParaSecao('${esc(it.id)}')">
+      <span class="sidebar-emoji" aria-hidden="true">${it.emoji}</span>
+      <span>${esc(it.label)}</span>
+    </button>`).join('');
+}
+
+function _irParaSecao(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Highlight visual rápido pra confirmar
+  el.style.transition = 'box-shadow .4s';
+  const old = el.style.boxShadow;
+  el.style.boxShadow = '0 0 0 3px var(--brand)';
+  setTimeout(() => { el.style.boxShadow = old; }, 700);
+}
+
+// Scroll-spy — destaca item da sidebar quando seu card entra no viewport.
+let _scrollSpyObserver = null;
+function _ativarScrollSpy() {
+  if (_scrollSpyObserver) _scrollSpyObserver.disconnect();
+  const opts = { rootMargin: '-20% 0px -60% 0px', threshold: 0 };
+  _scrollSpyObserver = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const id = e.target.id;
+      document.querySelectorAll('.sidebar-item').forEach(it => {
+        it.classList.toggle('active', it.dataset.target === id);
+      });
+    });
+  }, opts);
+  // Observa todos cards da aba atual
+  document.querySelectorAll('.tab-section.active .card, .tab-section.active .kpis').forEach(el => {
+    if (el.id) _scrollSpyObserver.observe(el);
+  });
+}
+
+// Adiciona botão de colapsar a todos os cards com <h2>.
+// Idempotente — só adiciona se ainda não houver botão.
+function _adicionarCollapseToggles() {
+  document.querySelectorAll('#dashboard .card').forEach(card => {
+    const h2 = card.querySelector(':scope > h2');
+    if (!h2) return;
+    if (card.querySelector(':scope > .card-collapse-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'card-collapse-btn';
+    btn.setAttribute('aria-label', 'Colapsar/expandir card');
+    btn.setAttribute('type', 'button');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>';
+    btn.onclick = e => {
+      e.stopPropagation();
+      card.classList.toggle('collapsed');
+      btn.setAttribute('aria-expanded', card.classList.contains('collapsed') ? 'false' : 'true');
+    };
+    card.appendChild(btn);
+  });
+}
+
+// Atualiza badge da tab Segurança com contagem de alertas críticos
+// (auditoria CRÍTICA + antifraude alertas).
+function _atualizarBadgeSeguranca() {
+  const badge = document.getElementById('tab-badge-seguranca');
+  if (!badge) return;
+  let count = 0;
+  if (_ultimaAuditoria?.length) {
+    count += _ultimaAuditoria.filter(p => p.severidade === 'CRÍTICA' && !_auditConfirmados.has(_auditKey(p))).length;
+  }
+  if (_ultimoAntiFraude?.alertas?.length) {
+    count += _ultimoAntiFraude.alertas.length;
+  }
+  badge.textContent = count;
+  badge.style.display = count > 0 ? 'inline-flex' : 'none';
+}
 
 // Lively: easing global do Chart.js — animações mais suaves e elegantes
 // em todos os charts (aging, fluxo, comparativo). Respeita reduced-motion.

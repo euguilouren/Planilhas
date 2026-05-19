@@ -3,8 +3,8 @@
 // Histórico:
 //   pfp-v1       — pré-rebrand (paleta antiga, sem lively upgrade)
 //   fluxopro-v2  — rebrand FluxoPRO + 27 bug fixes visuais + lively upgrade
-//                  (animações, copy-to-clipboard, highlight de busca, confete)
-const CACHE_NAME = 'fluxopro-v2';
+//   fluxopro-v3  — layout com 5 tabs + sidebar TOC + cards colapsáveis
+const CACHE_NAME = 'fluxopro-v3';
 
 // Only static shell assets — never cache dynamic/financial responses
 const PRECACHE_URLS = [
