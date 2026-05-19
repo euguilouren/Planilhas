@@ -1258,14 +1258,18 @@ function parseOFX(text) {
   --shadow-lg:0 12px 32px rgba(0,0,0,.6);
   --shadow-focus:0 0 0 3px rgba(59,130,246,.4);
 }
-[data-theme="dark"] body{background:#0f172a;background-image:radial-gradient(circle,#1e293b 1px,transparent 1px);background-size:22px 22px}
+[data-theme="dark"] body{background:var(--bg);background-image:radial-gradient(circle,var(--surface-2) 1px,transparent 1px);background-size:22px 22px}
 [data-theme="dark"] .card{background:var(--surface);border-color:var(--border)}
-[data-theme="dark"] .header{background:rgba(15,23,42,0.97)}
-[data-theme="dark"] table th{background:#1e3a5f}
-[data-theme="dark"] table tr:nth-child(even){background:#1e293b}
-[data-theme="dark"] table tr:hover{background:#334155}
+[data-theme="dark"] .header{background:rgba(11,18,32,0.96)}
+[data-theme="dark"] .toolbar{background:rgba(17,27,46,.85);border-color:var(--border)}
+[data-theme="dark"] table th{background:linear-gradient(135deg,#1E40AF,#1E3A8A)}
+[data-theme="dark"] table tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+[data-theme="dark"] table tr:hover td{background:rgba(255,255,255,.05)}
 [data-theme="dark"] .kpi{background:var(--surface)}
-[data-theme="dark"] #upload-area{background:linear-gradient(155deg,#020b18 0%,#1e3a5f 50%,#071525 100%)}
+[data-theme="dark"] .page-footer{background:var(--surface);border-color:var(--border)}
+[data-theme="dark"] .empty{background:var(--surface-2);border-color:var(--border-strong);color:var(--text-2)}
+[data-theme="dark"] .bar-w{background:var(--surface-2);border-color:var(--border)}
+[data-theme="dark"] #upload-area{background:linear-gradient(155deg,#020b18 0%,var(--navy-3) 50%,#071525 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',Arial,sans-serif;font-size:13.5px;background:#E8EDF4;
   background-image:radial-gradient(circle,#C8D4E3 1px,transparent 1px);
@@ -1675,7 +1679,9 @@ tr:hover td{background:#EEF4FF;transition:background .15s}
   .erp-selector-wrap select{max-width:100%;font-size:16px}
   /* Hero upload — full-height, safe-area iOS */
   #upload-area{padding:32px 16px env(safe-area-inset-bottom,16px);
-    min-height:100dvh;min-height:calc(100vh - 56px)}
+    /* Fallback DEVE vir antes: browsers antigos pulam dvh desconhecido;
+       browsers modernos sobreescrevem com dvh (corrige URL bar do Safari iOS) */
+    min-height:calc(100vh - 56px);min-height:100dvh}
   .drop-zone{padding:32px 18px;border-radius:18px}
   .drop-zone .upload-title{font-size:20px}
   .drop-zone .upload-sub{font-size:12px}
