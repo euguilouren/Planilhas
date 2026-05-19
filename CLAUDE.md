@@ -4,7 +4,7 @@
 
 ## Arquitetura em uma linha
 
-`index.html` é o produto inteiro (~3779 linhas, monolítico). Python é backend opcional não usado no GitHub Pages.
+`index.html` é o produto inteiro (~3898 linhas, monolítico). Python é backend opcional não usado no GitHub Pages.
 Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), Chart.js renderiza aging/fluxo/comparativo, Service Worker (`sw.js`) entrega PWA offline, CSP restringe execução. Briefing IA via Claude API é opcional — chave fica em `sessionStorage`, nunca persistida.
 
 ---
@@ -36,7 +36,7 @@ Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), C
 | 1158–1190 | `parseOFX()` | Parser nativo SGML + XML 2.x |
 | 1191–1678 | `<style>` | CSS completo — `:root`, layout, responsivo, dark mode (`[data-theme="dark"]`) |
 | 1680–1946 | `<body>` HTML | Header, upload, cards de análise (`#card-*`), painel comparativo, briefing IA, onboarding |
-| 1948–3779 | `<script>` app.js | Estado global, eventos, funções render, integração Claude |
+| 1948–3898 | `<script>` app.js | Estado global, eventos, funções render, integração Claude |
 | 1985–2014 | Estado global | Ver tabela abaixo |
 | 2143–2282 | `carregarArquivo()` | FileReader → `_decodeTextBuffer` (CSV) ou SheetJS/OFX → `detectarColunas()` → `detectarERP()` → `mostrarConfigColunas()`. **Lock `_analisandoAgora` no início** previne race |
 | 2300–2365 | `carregarArquivoComparativo()` | Mesmo fluxo p/ segundo dataset; também sob lock `_analisandoAgora` |
@@ -56,7 +56,7 @@ Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), C
 | 3529–3567 | `exportarJSON()` + `exportarCSV()` | Exports. `exportarCSV` usa `_csvEsc` em **headers e células** |
 | 3569–3645 | `_trocarAba()` | Multi-sheet XLSX. Lock `_analisandoAgora`, destroi charts, esconde dashboard, reset paginação |
 | 3678–3681 | Service Worker | `navigator.serviceWorker.register('sw.js')` |
-| 3779 | Footer + fim de `<body>` | Branding "Powered by Luan Guilherme Lourenço" |
+| 3898 | Footer + fim de `<body>` | Branding "Powered by Luan Guilherme Lourenço" |
 
 ---
 
@@ -220,6 +220,7 @@ Adicionar em `ASSINATURAS_ERP`: `'NOME_ERP': ['ColunaTipica1', 'ColunaTipica2', 
 | `_csvEsc` aplicado em **headers** e células do `exportarCSV` | Remover do header reintroduz CSV/Formula injection — planilha com coluna `=HYPERLINK(...)` vira fórmula no Excel |
 | `_parseDataBR` usa `getUTC*` para Excel serial | Trocar por `getFullYear()` reintroduz day-1 bug em UTC-3 |
 | `_analisandoAgora` checado em `_trocarAba`, `carregarArquivo`, `carregarArquivoComparativo` | Sem o guard, troca durante análise corrompe `_ultimosKpis` etc |
+| Cores SEMPRE via `var(--*)` em `<style>` e SVG inline | Hex literal só é aceito em template literal JS quando passa a `element.style.*` (CSS vars funcionam aí). Hex no `<style>` ou `fill="#..."` em SVG reintroduz a paleta antiga pós-rebrand — 32 ocorrências corrigidas nos PRs #58/#59/#60 |
 | Chave Claude API em `sessionStorage` | Persistir em `localStorage` viola a promessa de privacidade |
 
 ---

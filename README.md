@@ -7,9 +7,9 @@
 **Dashboard financeiro 100% no navegador**
 
 [![CI](https://github.com/euguilouren/FluxoPRO/actions/workflows/ci.yml/badge.svg)](https://github.com/euguilouren/FluxoPRO/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-391%20Python%20%2B%2098%20JS-2e7d32)
-![Anti-Fraude](https://img.shields.io/badge/anti--fraude-8%20algoritmos-C9A84C)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Testes](https://img.shields.io/badge/testes-337%20Python%20%2B%20270%20JS-2e7d32)
+![Anti-Fraude](https://img.shields.io/badge/anti--fraude-12%2B%20regras-C9A84C)
 ![License](https://img.shields.io/badge/licença-MIT-22c55e)
 
 **Criado por [Luan Guilherme Lourenço](https://github.com/euguilouren)**
