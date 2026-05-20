@@ -1,4 +1,12 @@
-const CACHE_NAME = 'pfp-v90';
+// IMPORTANTE: bump esta versão a cada deploy que mexa em index.html, CSS ou JS
+// — caches antigos invalidam automaticamente no evento `activate`.
+// Histórico:
+//   pfp-v1       — pré-rebrand (paleta antiga, sem lively upgrade)
+//   fluxopro-v2  — rebrand FluxoPRO + 27 bug fixes visuais + lively upgrade
+//   fluxopro-v3  — layout com 5 tabs + sidebar TOC + cards colapsáveis
+//   fluxopro-v4  — pacote Foco & Fluidez: sub-tabs + hash routing +
+//                  localStorage + atalhos teclado + modo foco
+const CACHE_NAME = 'fluxopro-v95';
 
 // Only static shell assets — never cache dynamic/financial responses
 const PRECACHE_URLS = [
