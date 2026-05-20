@@ -6,7 +6,8 @@
 //   fluxopro-v3  — layout com 5 tabs + sidebar TOC + cards colapsáveis
 //   fluxopro-v4  — pacote Foco & Fluidez: sub-tabs + hash routing +
 //                  localStorage + atalhos teclado + modo foco
-const CACHE_NAME = 'fluxopro-v95';
+//   fluxopro-v5  — fix KPI overflow desktop + header compacto mobile
+const CACHE_NAME = 'fluxopro-v96';
 
 // Only static shell assets — never cache dynamic/financial responses
 const PRECACHE_URLS = [
