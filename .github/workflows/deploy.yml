@@ -52,7 +52,11 @@ jobs:
           cp -v sw.js dist/sw.js
 
       - name: Bump SW cache version
-        run: sed -i -E "s/(CACHE_NAME = ')pfp-v[0-9]+/\1pfp-v${{ github.run_number }}/" dist/sw.js
+        # Aceita tanto 'pfp-v…' (legacy) quanto 'fluxopro-v…' (atual).
+        # Suffix com run_number garante invalidação a cada deploy.
+        run: |
+          sed -i -E "s/(CACHE_NAME = ')(pfp|fluxopro)-v[0-9]+/\1\2-v${{ github.run_number }}/" dist/sw.js
+          echo "After bump:"; grep "CACHE_NAME" dist/sw.js
 
       - name: Verificar resultado
         run: |
@@ -65,7 +69,8 @@ jobs:
           "
           test -f dist/sw.js || (echo 'sw.js ausente!' && exit 1)
           test -f dist/manifest.json || (echo 'manifest.json ausente!' && exit 1)
-          grep -q 'pfp-v${{ github.run_number }}' dist/sw.js || (echo 'Cache version não bumped!' && exit 1)
+          grep -qE "CACHE_NAME = '(pfp|fluxopro)-v${{ github.run_number }}'" dist/sw.js \
+            || (echo 'Cache version não bumped!' && exit 1)
           echo 'Assets PWA: OK'
 
       - name: Deploy para gh-pages
