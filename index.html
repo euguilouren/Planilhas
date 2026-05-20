@@ -4494,13 +4494,16 @@ function _trocarSubAba(tab, subTab, opts) {
 
 // ── URL HASH ROUTING ─────────────────────────────────────────
 // Formato: #/tab[/subtab]   ex: #/analise/dre, #/seguranca, #/dados/comparativo
+// pushState cria entrada no histórico para que browser back/forward
+// navegue entre abas. replaceState antes não criava entradas → user
+// que apertava back ia pra página anterior do site, não pra aba anterior.
 function _atualizarHashRoute() {
   const sub = _subAbaPorAba[_abaAtual];
   const hash = (sub && sub !== 'tudo' && _ABAS_COM_SUBTABS.includes(_abaAtual))
     ? `#/${_abaAtual}/${sub}`
     : `#/${_abaAtual}`;
   if (location.hash !== hash) {
-    history.replaceState(null, '', hash);
+    history.pushState(null, '', hash);
   }
 }
 
@@ -4527,19 +4530,39 @@ function _salvarTabState() {
   } catch (_) { /* storage indisponível */ }
 }
 
+// Subtabs aceitas por aba — usado para validar valores vindos de
+// localStorage (storage corrompido podia poluir _subAbaPorAba com strings
+// arbitrárias, e _trocarSubAba não acharia nenhum botão para ativar).
+const _SUBTABS_VALIDAS = {
+  analise:   new Set(['tudo','fluxo','aging','dre','pareto']),
+  seguranca: new Set(['tudo','auditoria','antifraude']),
+  dados:     new Set(['tudo','tabela','comparativo']),
+};
+
 function _restaurarTabState() {
   try {
     const raw = localStorage.getItem(_LS_KEY_TAB);
     if (!raw) return;
     const st = JSON.parse(raw);
-    if (st.sub) Object.assign(_subAbaPorAba, st.sub);
+    // Validar sub-tabs — só aceita chaves conhecidas + valores na whitelist
+    if (st.sub && typeof st.sub === 'object') {
+      for (const aba of Object.keys(_subAbaPorAba)) {
+        const v = st.sub[aba];
+        if (typeof v !== 'string') continue;
+        // Se aba tem subtabs configuradas, valida valor; senão aceita
+        const validas = _SUBTABS_VALIDAS[aba];
+        if (!validas || validas.has(v)) _subAbaPorAba[aba] = v;
+      }
+    }
     if (st.collapsed && Array.isArray(st.collapsed)) {
       st.collapsed.forEach(id => {
+        if (typeof id !== 'string') return;
         const c = document.getElementById(id);
         if (c) c.classList.add('collapsed');
       });
     }
-    if (st.aba && document.querySelector(`.tab-section[data-tab="${st.aba}"]`)) {
+    if (st.aba && typeof st.aba === 'string'
+        && document.querySelector(`.tab-section[data-tab="${st.aba}"]`)) {
       _trocarAbaDashboard(st.aba, { skipHash: true, skipPersist: true, skipScroll: true, force: true });
     }
   } catch (_) { /* corrupted/storage indisponível */ }
@@ -4676,9 +4699,12 @@ document.addEventListener('keydown', e => {
     if (/^[1-5]$/.test(e.key)) {
       const idx = parseInt(e.key, 10) - 1;
       const novaAba = _ORDEM_ABAS[idx];
-      if (novaAba && novaAba !== _abaAtual) {
+      if (novaAba) {
         e.preventDefault();
-        _trocarAbaDashboard(novaAba);
+        // Se estiver em modo foco, sai PRIMEIRO — senão usuário não
+        // vê o efeito da troca de aba (foco continua mostrando card-X)
+        if (document.body.classList.contains('focus-mode')) _sairModoFoco();
+        if (novaAba !== _abaAtual) _trocarAbaDashboard(novaAba);
       }
       return;
     }

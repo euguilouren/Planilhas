@@ -7,7 +7,10 @@
 //   fluxopro-v4  — pacote Foco & Fluidez: sub-tabs + hash routing +
 //                  localStorage + atalhos teclado + modo foco
 //   fluxopro-v5  — fix KPI overflow desktop + header compacto mobile
-const CACHE_NAME = 'fluxopro-v5';
+//   fluxopro-v6  — hash pushState (back/forward navega entre abas),
+//                  atalhos 1-5 saem do foco antes de trocar tab,
+//                  validação localStorage contra subtabs inválidas
+const CACHE_NAME = 'fluxopro-v6';
 
 // Only static shell assets — never cache dynamic/financial responses
 const PRECACHE_URLS = [
