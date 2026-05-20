@@ -4,8 +4,10 @@
 
 ## Arquitetura em uma linha
 
-`index.html` é o produto inteiro (~3898 linhas, monolítico). Python é backend opcional não usado no GitHub Pages.
+`index.html` é o produto inteiro (~4801 linhas, monolítico). Python é backend opcional não usado no GitHub Pages.
 Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), Chart.js renderiza aging/fluxo/comparativo, Service Worker (`sw.js`) entrega PWA offline, CSP restringe execução. Briefing IA via Claude API é opcional — chave fica em `sessionStorage`, nunca persistida.
+
+**Navegação:** 5 abas principais (Visão Geral / Análise / Segurança / Dados / IA) + sub-tabs em Análise/Segurança/Dados + sidebar TOC sticky + cards colapsáveis + URL hash routing (`#/tab/subtab`) + persistência localStorage + atalhos teclado (1-5, ←→, ↑↓, Esc) + modo foco fullscreen (⛶ em cada card).
 
 ---
 
@@ -36,7 +38,7 @@ Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), C
 | 1158–1190 | `parseOFX()` | Parser nativo SGML + XML 2.x |
 | 1191–1678 | `<style>` | CSS completo — `:root`, layout, responsivo, dark mode (`[data-theme="dark"]`) |
 | 1680–1946 | `<body>` HTML | Header, upload, cards de análise (`#card-*`), painel comparativo, briefing IA, onboarding |
-| 1948–3898 | `<script>` app.js | Estado global, eventos, funções render, integração Claude |
+| 1948–4801 | `<script>` app.js | Estado global, eventos, funções render, integração Claude, layout (tabs/sub-tabs/sidebar/foco/atalhos) |
 | 1985–2014 | Estado global | Ver tabela abaixo |
 | 2143–2282 | `carregarArquivo()` | FileReader → `_decodeTextBuffer` (CSV) ou SheetJS/OFX → `detectarColunas()` → `detectarERP()` → `mostrarConfigColunas()`. **Lock `_analisandoAgora` no início** previne race |
 | 2300–2365 | `carregarArquivoComparativo()` | Mesmo fluxo p/ segundo dataset; também sob lock `_analisandoAgora` |
@@ -56,7 +58,9 @@ Análise 100% client-side: SheetJS lê XLSX/CSV (+ OFX nativo via `parseOFX`), C
 | 3529–3567 | `exportarJSON()` + `exportarCSV()` | Exports. `exportarCSV` usa `_csvEsc` em **headers e células** |
 | 3569–3645 | `_trocarAba()` | Multi-sheet XLSX. Lock `_analisandoAgora`, destroi charts, esconde dashboard, reset paginação |
 | 3678–3681 | Service Worker | `navigator.serviceWorker.register('sw.js')` |
-| 3898 | Footer + fim de `<body>` | Branding "Powered by Luan Guilherme Lourenço" |
+| 3678–3681 | Service Worker | `CACHE_NAME='fluxopro-v4'` + `updateViaCache:'none'` no register (force update a cada load) |
+| 4380–4730 | **Layout system** | `_trocarAbaDashboard` + `_trocarSubAba` + `_atualizarHashRoute` / `_aplicarHashRoute` + `_salvarTabState` / `_restaurarTabState` (localStorage `fluxopro_tab_state`) + `_gerarSidebarTOC` + `_ativarScrollSpy` (IntersectionObserver) + atalhos teclado (`1-5`, `←→`, `↑↓`, `Esc`) + `_entrarModoFoco` / `_sairModoFoco` (body.focus-mode + .focus-target). `_subAbaPorAba` persistido entre sessões. `_ABAS_COM_SUBTABS = ['analise','seguranca','dados']` controla quando sidebar TOC é oculta |
+| 4801 | Footer + fim de `<body>` | Branding "Powered by Luan Guilherme Lourenço" |
 
 ---
 
@@ -221,6 +225,9 @@ Adicionar em `ASSINATURAS_ERP`: `'NOME_ERP': ['ColunaTipica1', 'ColunaTipica2', 
 | `_parseDataBR` usa `getUTC*` para Excel serial | Trocar por `getFullYear()` reintroduz day-1 bug em UTC-3 |
 | `_analisandoAgora` checado em `_trocarAba`, `carregarArquivo`, `carregarArquivoComparativo` | Sem o guard, troca durante análise corrompe `_ultimosKpis` etc |
 | Cores SEMPRE via `var(--*)` em `<style>` e SVG inline | Hex literal só é aceito em template literal JS quando passa a `element.style.*` (CSS vars funcionam aí). Hex no `<style>` ou `fill="#..."` em SVG reintroduz a paleta antiga pós-rebrand — 32 ocorrências corrigidas nos PRs #58/#59/#60 |
+| `CACHE_NAME` em `sw.js` — bump a cada mudança em index.html/CSS/JS | Sem bump, PWA serve versão antiga do cache indefinidamente. Histórico documentado no próprio sw.js |
+| Preservar `el.style.transition` original ao animar inline | `_irParaSecao` aprendeu a salvar+restaurar `oldTrans` — setar `el.style.transition='box-shadow .4s'` sobrescreve transition do hover/animate do card permanentemente se não restaurar |
+| Ordem `data-tab` em sub-sections + `_subAbaPorAba` em sync com sub-tab-bar | Quebrar ordem causa "Tudo" mostrar sub-section errada ou vice-versa |
 | Chave Claude API em `sessionStorage` | Persistir em `localStorage` viola a promessa de privacidade |
 
 ---

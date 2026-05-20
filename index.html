@@ -4562,11 +4562,16 @@ function _irParaSecao(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  // Highlight visual rápido pra confirmar
+  // Highlight visual rápido. Preserva inline transition/boxShadow originais
+  // — sem isso, transitions de hover/animation do card ficavam quebradas.
+  const oldTrans = el.style.transition;
+  const oldShadow = el.style.boxShadow;
   el.style.transition = 'box-shadow .4s';
-  const old = el.style.boxShadow;
   el.style.boxShadow = '0 0 0 3px var(--brand)';
-  setTimeout(() => { el.style.boxShadow = old; }, 700);
+  setTimeout(() => {
+    el.style.boxShadow = oldShadow;
+    el.style.transition = oldTrans;
+  }, 700);
 }
 
 // Scroll-spy — destaca item da sidebar quando seu card entra no viewport.
